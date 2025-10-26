@@ -88,8 +88,8 @@ export const courseFormFields: FormField[] = [
   {
     name: 'price',
     type: 'number',
-    label: 'Цена (USD)',
-    placeholder: '0.00',
+    label: 'Цена (KZT)',
+    placeholder: '',
     required: true,
     min: 0,
     step: 0.01,

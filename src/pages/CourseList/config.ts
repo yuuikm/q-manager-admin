@@ -18,10 +18,7 @@ export const getTypeLabel = (type: string) => {
 };
 
 export const formatPrice = (price: number) => {
-  return new Intl.NumberFormat("ru-RU", {
-    style: "currency",
-    currency: "USD",
-  }).format(price);
+  return `${price}₸`;
 };
 
 export const formatDate = (dateString: string): string => {

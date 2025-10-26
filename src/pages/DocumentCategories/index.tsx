@@ -63,6 +63,7 @@ const DocumentCategories = () => {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
         body: JSON.stringify(formData),
       });
@@ -74,6 +75,9 @@ const DocumentCategories = () => {
         setFormData({
           name: '',
         });
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        alert(errorData.message || 'Ошибка сохранения категории');
       }
     } catch (error) {
       console.error('Ошибка сохранения категории:', error);
@@ -97,17 +101,26 @@ const DocumentCategories = () => {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
       });
 
       if (response.ok) {
         await fetchCategories();
       } else {
-        const error = await response.json();
-        alert(error.message || 'Ошибка удаления категории');
+        let errorMessage = 'Ошибка удаления категории';
+        try {
+          const error = await response.json();
+          errorMessage = error.message || errorMessage;
+        } catch (e) {
+          // If response is not JSON, use status text
+          errorMessage = response.statusText || errorMessage;
+        }
+        alert(errorMessage);
       }
     } catch (error) {
       console.error('Ошибка удаления категории:', error);
+      alert('Произошла ошибка при удалении категории');
     }
   };
 

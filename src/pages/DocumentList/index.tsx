@@ -215,7 +215,7 @@ const DocumentList: FC = () => {
   );
 
   const renderPriceColumn = (document: Document) => (
-    <div className="text-sm font-medium text-gray-900">{document.price} ₸</div>
+    <div className="text-sm font-medium text-gray-900">{document.price}₸</div>
   );
 
   const renderStatusColumn = (document: Document) => (
