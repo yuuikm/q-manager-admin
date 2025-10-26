@@ -111,5 +111,6 @@ export const getDocumentInitialValues = (editMode: boolean, documentData: any) =
   price: editMode && documentData ? documentData.price : 0,
   preview_pages: editMode && documentData ? (documentData.preview_pages || 3) : 3,
   category: editMode && documentData ? documentData.category?.name : '',
-  file: null,
+  file: undefined, // Use undefined instead of null for file input
+  currentFileName: editMode && documentData ? documentData.file_name : undefined,
 });

@@ -289,18 +289,25 @@ const FormController: FC<FormConfig> = ({
 
       case 'file':
         return (
-          <input
-            type="file"
-            name={field.name}
-            accept={field.accept}
-            multiple={field.multiple}
-            disabled={field.disabled}
-            onChange={(event) => {
-              const file = event.currentTarget.files?.[0] || null;
-              formik.setFieldValue(field.name, file);
-            }}
-            className={`${baseClasses} ${errorClasses}`}
-          />
+          <div>
+            <input
+              type="file"
+              name={field.name}
+              accept={field.accept}
+              multiple={field.multiple}
+              disabled={field.disabled}
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0] || null;
+                formik.setFieldValue(field.name, file);
+              }}
+              className={`${baseClasses} ${errorClasses}`}
+            />
+            {formik.values.currentFileName && (
+              <p className="mt-2 text-sm text-gray-600">
+                Текущий файл: <span className="font-medium">{formik.values.currentFileName}</span>
+              </p>
+            )}
+          </div>
         );
 
       default:
