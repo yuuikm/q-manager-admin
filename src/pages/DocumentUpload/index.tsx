@@ -67,6 +67,11 @@ const DocumentUpload: FC = () => {
       formData.append('description', values.description);
       formData.append('price', values.price.toString());
       
+      // Only append preview_pages if not in edit mode or if explicitly provided
+      if (!editMode || values.preview_pages !== undefined) {
+        formData.append('preview_pages', values.preview_pages.toString());
+      }
+      
       // Handle category - send the category name directly
       const categoryName = values.category.trim();
       if (!categoryName) {
@@ -93,6 +98,16 @@ const DocumentUpload: FC = () => {
       }
 
 
+      // Debug: Log the form data being sent
+      console.log('Sending form data:', {
+        title: values.title,
+        description: values.description,
+        price: values.price,
+        preview_pages: values.preview_pages,
+        category: values.category,
+        hasFile: !!values.file,
+      });
+
       const response = await fetch(url, {
         method,
         headers: {
@@ -118,9 +133,10 @@ const DocumentUpload: FC = () => {
         navigate(LINKS.loginLink);
       } else {
         const errorData = await response.json().catch(() => ({}));
+        console.error('Upload error:', errorData);
         setUploadStatus({
           type: 'error',
-          message: errorData.message || 'Ошибка при загрузке документа',
+          message: errorData.message || errorData.error || 'Ошибка при загрузке документа',
         });
       }
     } catch (error) {
