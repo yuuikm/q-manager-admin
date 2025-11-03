@@ -31,14 +31,7 @@ export const courseValidationSchema = Yup.object({
       const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
       return allowedTypes.includes((value as File).type);
     }),
-  max_students: Yup.number()
-    .min(1, 'Минимум 1 студент')
-    .max(1000, 'Максимум 1000 студентов')
-    .nullable(),
-  duration_hours: Yup.number()
-    .min(1, 'Минимум 1 час')
-    .max(1000, 'Максимум 1000 часов')
-    .nullable(),
+  // removed max_students and duration_hours
   requirements: Yup.string().nullable(),
   learning_outcomes: Yup.string().nullable(),
   zoom_link: Yup.string().nullable().test('url', 'Неверный формат ссылки', function(value) {
@@ -120,22 +113,7 @@ export const courseFormFields: FormField[] = [
     label: 'Изображение курса',
     accept: 'image/jpeg,image/png,image/gif,image/webp',
   },
-  {
-    name: 'max_students',
-    type: 'number',
-    label: 'Максимальное количество студентов',
-    placeholder: '50',
-    min: 1,
-    max: 1000,
-  },
-  {
-    name: 'duration_hours',
-    type: 'number',
-    label: 'Продолжительность (часы)',
-    placeholder: '40',
-    min: 1,
-    max: 1000,
-  },
+  // removed max_students and duration_hours fields
   {
     name: 'requirements',
     type: 'textarea',
@@ -185,8 +163,7 @@ export const getCourseInitialValues = (editMode: boolean, courseData: any, onMat
   type: editMode && courseData ? courseData.type : 'online',
   category_id: editMode && courseData ? courseData.category?.id : '',
   featured_image: null,
-  max_students: editMode && courseData ? courseData.max_students : 50,
-  duration_hours: editMode && courseData ? courseData.duration_hours : 40,
+  // removed max_students and duration_hours
   requirements: editMode && courseData ? courseData.requirements : '',
   learning_outcomes: editMode && courseData ? courseData.learning_outcomes : '',
   zoom_link: editMode && courseData ? courseData.zoom_link : '',

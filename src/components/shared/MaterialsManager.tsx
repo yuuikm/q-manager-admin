@@ -75,7 +75,16 @@ const MaterialsManager: FC<MaterialsManagerProps> = ({ form, courseId, editMode 
       if (response.ok) {
         const data = await response.json();
         console.log('MaterialsManager: Fetched materials:', data);
-        setMaterials(data);
+        const uniqueById = Array.isArray(data)
+          ? Object.values(
+              (data as Material[]).reduce<Record<string, Material>>((acc, item) => {
+                const key = String(item.id ?? `tmp-${item.title}-${item.sort_order}`);
+                acc[key] = item;
+                return acc;
+              }, {})
+            )
+          : [];
+        setMaterials(uniqueById as Material[]);
       } else {
         console.error('MaterialsManager: Failed to fetch materials:', response.status, response.statusText);
       }
@@ -102,7 +111,8 @@ const MaterialsManager: FC<MaterialsManagerProps> = ({ form, courseId, editMode 
   };
 
   const editMaterial = (material: Material) => {
-    setEditingMaterial(material);
+    // Use a shallow copy to avoid mutating list item by reference
+    setEditingMaterial({ ...material });
     setShowAddForm(true);
   };
 
@@ -112,17 +122,18 @@ const MaterialsManager: FC<MaterialsManagerProps> = ({ form, courseId, editMode 
     console.log('MaterialsManager: courseId type:', typeof courseId, 'editMode type:', typeof editMode);
     
     if (!courseId) {
-      // For new courses, just add to local state - will be saved when course is created
+      // Local-only save (new course): update existing by temp id or add new
       console.log('MaterialsManager: Saving material locally (new course)');
-      const newMaterial = {
-        ...materialData,
-        id: Date.now(), // Temporary ID for local state
-        course_id: null,
-      };
-      console.log('MaterialsManager: Adding material to local state:', newMaterial);
       setMaterials(prevMaterials => {
+        const hasId = materialData.id != null;
+        if (hasId) {
+          const updated = prevMaterials.map(m => (m.id === materialData.id ? { ...materialData } : m));
+          console.log('MaterialsManager: Updated existing local material by id:', materialData.id, updated);
+          return updated;
+        }
+        const newMaterial = { ...materialData, id: Date.now(), course_id: null } as Material;
         const updated = [...prevMaterials, newMaterial];
-        console.log('MaterialsManager: Updated materials array:', updated);
+        console.log('MaterialsManager: Added new local material:', newMaterial);
         return updated;
       });
       setShowAddForm(false);
@@ -152,37 +163,62 @@ const MaterialsManager: FC<MaterialsManagerProps> = ({ form, courseId, editMode 
         formData.append('content', materialData.content);
       }
       
-      if (materialData.duration_minutes) {
-        formData.append('duration_minutes', materialData.duration_minutes.toString());
-      }
+      // removed duration_minutes
       
       if (materialData.file) {
         formData.append('file', materialData.file);
       }
 
-      const url = materialData.id 
+      const hasRealId = !!(materialData.id && Number(materialData.id) < 1000000000000);
+      const url = hasRealId
         ? `${ADMIN_ENDPOINTS.COURSE_MATERIALS}/${materialData.id}`
         : ADMIN_ENDPOINTS.COURSE_MATERIALS;
       
-      const method = materialData.id ? 'PUT' : 'POST';
+      // Use POST with _method override for Laravel compatibility with multipart
+      const method = 'POST';
+
+      if (hasRealId) {
+        formData.append('_method', 'PUT');
+      }
 
       const response = await fetch(url, {
         method,
         headers: {
           'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
         },
         body: formData,
       });
 
       if (response.ok) {
-        const result = await response.json();
-        if (materialData.id) {
-          setMaterials(materials.map(m => m === editingMaterial ? result.material : m));
-        } else {
-          setMaterials([...materials, result.material]);
+        let result: any = null;
+        try {
+          result = await response.json();
+        } catch (_) {
+          result = null;
+        }
+
+        if (hasRealId) {
+          const updated = result?.material ?? { ...materialData };
+          setMaterials(prev => {
+            const next = prev.map(m => (m.id === (updated.id ?? materialData.id) ? updated : m));
+            const map: Record<string, Material> = {};
+            next.forEach(it => { map[String(it.id ?? `${it.title}-${it.sort_order}`)] = it; });
+            return Object.values(map) as Material[];
+          });
+        } else if (result?.material) {
+          setMaterials(prev => {
+            const next = [...prev, result.material];
+            const map: Record<string, Material> = {};
+            next.forEach(it => { map[String(it.id ?? `${it.title}-${it.sort_order}`)] = it; });
+            return Object.values(map) as Material[];
+          });
         }
         setShowAddForm(false);
         setEditingMaterial(null);
+        // Ensure state is in sync with backend
+        await fetchMaterials();
       } else {
         console.error('Failed to save material:', response.status, response.statusText);
         const errorData = await response.json().catch(() => ({}));
@@ -200,16 +236,28 @@ const MaterialsManager: FC<MaterialsManagerProps> = ({ form, courseId, editMode 
 
     setLoading(true);
     try {
+      // If course is not yet created or this looks like a temp id, just remove locally
+      if (!courseId || Number(materialId) >= 1000000000000) {
+        setMaterials(prev => prev.filter(m => m.id !== materialId));
+        return;
+      }
+
       const token = localStorage.getItem('auth_token');
       const response = await fetch(`${ADMIN_ENDPOINTS.COURSE_MATERIALS}/${materialId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
         },
       });
 
-      if (response.ok) {
-        setMaterials(materials.filter(m => m.id !== materialId));
+      if (response.ok || response.status === 204) {
+        setMaterials(prev => prev.filter(m => m.id !== materialId));
+      } else {
+        console.error('Failed to delete material:', response.status, response.statusText);
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Delete error details:', errorData);
       }
     } catch (error) {
       console.error('Ошибка удаления материала:', error);
@@ -294,11 +342,7 @@ const MaterialsManager: FC<MaterialsManagerProps> = ({ form, courseId, editMode 
                   {material.description && (
                     <p className="text-sm text-gray-600 mt-1">{material.description}</p>
                   )}
-                  {material.duration_minutes && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      Длительность: {material.duration_minutes} мин
-                    </p>
-                  )}
+                  {/* removed duration display */}
                 </div>
                 <div className="flex gap-2">
                   <Button
@@ -464,18 +508,7 @@ const MaterialForm: FC<MaterialFormProps> = ({ material, onSave, onCancel, loadi
           </div>
         )}
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Длительность (минуты)
-          </label>
-          <input
-            type="number"
-            value={formData.duration_minutes || ''}
-            onChange={(e) => handleChange('duration_minutes', parseInt(e.target.value) || undefined)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            min="1"
-          />
-        </div>
+        {/* removed duration_minutes input */}
 
         <div className="flex gap-4">
           <div className="flex items-center">

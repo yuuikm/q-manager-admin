@@ -106,8 +106,7 @@ const CourseUpload: FC = () => {
         return;
       }
       formData.append('category', selectedCategory.name);
-      formData.append('max_students', values.max_students.toString());
-      formData.append('duration_hours', values.duration_hours.toString());
+      // removed max_students and duration_hours
       // Only append optional fields if they have values
       if (values.requirements && values.requirements.trim()) {
         formData.append('requirements', values.requirements);
@@ -262,9 +261,7 @@ const CourseUpload: FC = () => {
           formData.append('content', material.content);
         }
         
-        if (material.duration_minutes) {
-          formData.append('duration_minutes', material.duration_minutes.toString());
-        }
+        // removed duration_minutes
         
         if (material.file) {
           formData.append('file', material.file);

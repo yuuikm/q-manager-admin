@@ -86,24 +86,46 @@ const CourseList: FC = () => {
         return;
       }
 
-      const response = await fetch(ADMIN_ENDPOINTS.COURSES, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      // Fetch both published and unpublished to show all in admin list
+      const [pubRes, unpubRes] = await Promise.all([
+        fetch(`${ADMIN_ENDPOINTS.COURSES}?published=1`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }),
+        fetch(`${ADMIN_ENDPOINTS.COURSES}?published=0`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }),
+      ]);
 
-      if (response.ok) {
-        const data = await response.json();
-        setCourses(data.data || data);
-        setError(null);
-      } else if (response.status === 401) {
+      if (pubRes.status === 401 || unpubRes.status === 401) {
         // Handle unauthorized - token expired
         localStorage.removeItem('auth_token');
         navigate(LINKS.loginLink);
+        return;
+      }
+
+      if (pubRes.ok || unpubRes.ok) {
+        const [pubJson, unpubJson] = await Promise.all([
+          pubRes.ok ? pubRes.json() : Promise.resolve({ data: [] }),
+          unpubRes.ok ? unpubRes.json() : Promise.resolve({ data: [] }),
+        ]);
+
+        const pubList = (pubJson?.data ?? pubJson ?? []) as Course[];
+        const unpubList = (unpubJson?.data ?? unpubJson ?? []) as Course[];
+        const combined = [...pubList, ...unpubList];
+        const map: Record<string, Course> = {};
+        combined.forEach(c => { map[String(c.id)] = c; });
+        const allCourses = Object.values(map) as Course[];
+        setCourses(allCourses);
+        setError(null);
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        setError(errorData.message || 'Не удалось загрузить курсы');
+        const err = pubRes.ok ? await unpubRes.json().catch(() => ({})) : await pubRes.json().catch(() => ({}));
+        setError(err.message || 'Не удалось загрузить курсы');
       }
     } catch (error) {
       console.error('Ошибка загрузки курсов:', error);

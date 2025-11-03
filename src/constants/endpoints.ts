@@ -1,4 +1,4 @@
-export const API_BASE_URL = 'http://localhost:8000/api';
+export const API_BASE_URL = 'https://back.q-manager.kz/api';
 
 export const AUTH_ENDPOINTS = {
   LOGIN: `${API_BASE_URL}/auth/login`,
