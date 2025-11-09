@@ -97,22 +97,15 @@ const CourseUpload: FC = () => {
       formData.append('description', values.description);
       formData.append('content', values.content);
       formData.append('price', values.price.toString());
-      
-      // Handle multiple types - send as JSON array
-      if (Array.isArray(values.type)) {
-        formData.append('type', JSON.stringify(values.type));
-      } else {
-        formData.append('type', JSON.stringify([values.type]));
-      }
-      
-      // Backend expects category name - send directly (backend will create if it doesn't exist)
-      const categoryName = values.category_id?.trim();
-      if (!categoryName) {
-        setUploadStatus({ type: 'error', message: 'Пожалуйста, введите название категории' });
+      formData.append('type', values.type);
+      // Backend expects category name, not ID
+      const selectedCategory = categories.find(cat => cat.id === Number(values.category_id));
+      if (!selectedCategory) {
+        setUploadStatus({ type: 'error', message: 'Пожалуйста, выберите категорию' });
         setUploading(false);
         return;
       }
-      formData.append('category', categoryName);
+      formData.append('category', selectedCategory.name);
       formData.append('max_students', values.max_students.toString());
       formData.append('duration_hours', values.duration_hours.toString());
       // Only append optional fields if they have values
@@ -306,9 +299,9 @@ const CourseUpload: FC = () => {
     }
   };
 
-  // Update category options in form fields - use names as values for searchable-select
+  // Update category options in form fields
   const categoryOptions: SelectOption[] = categories.map(cat => ({
-    value: cat.name,
+    value: cat.id,
     label: cat.name,
   }));
 
@@ -317,62 +310,6 @@ const CourseUpload: FC = () => {
       return {
         ...field,
         options: categoryOptions,
-      };
-    }
-    if (field.name === 'type') {
-      // Replace type field with custom multi-select checkboxes
-      return {
-        ...field,
-        customRender: (_field: FormField, formik: any) => {
-          const typeOptions = [
-            { value: 'online', label: 'Онлайн' },
-            { value: 'self_learning', label: 'Самообучение' },
-            { value: 'offline', label: 'Офлайн' },
-          ];
-          
-          const selectedTypes = Array.isArray(formik.values.type) 
-            ? formik.values.type 
-            : formik.values.type ? [formik.values.type] : [];
-          
-          const handleTypeChange = (typeValue: string, checked: boolean) => {
-            let newTypes: string[];
-            if (checked) {
-              // Add type if not already selected and limit to 3
-              if (selectedTypes.length < 3 && !selectedTypes.includes(typeValue)) {
-                newTypes = [...selectedTypes, typeValue];
-              } else {
-                newTypes = selectedTypes;
-              }
-            } else {
-              // Remove type
-              newTypes = selectedTypes.filter((t: string) => t !== typeValue);
-            }
-            formik.setFieldValue('type', newTypes);
-          };
-          
-          return (
-            <div className="space-y-2">
-              {typeOptions.map((option) => (
-                <div key={option.value} className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id={`type-${option.value}`}
-                    checked={selectedTypes.includes(option.value)}
-                    onChange={(e) => handleTypeChange(option.value, e.target.checked)}
-                    disabled={selectedTypes.length >= 3 && !selectedTypes.includes(option.value)}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <label htmlFor={`type-${option.value}`} className="ml-2 block text-sm text-gray-900">
-                    {option.label}
-                  </label>
-                </div>
-              ))}
-              {selectedTypes.length >= 3 && (
-                <p className="text-sm text-gray-500">Выбрано максимум 3 типа</p>
-              )}
-            </div>
-          );
-        },
       };
     }
     if (field.name === 'materials') {

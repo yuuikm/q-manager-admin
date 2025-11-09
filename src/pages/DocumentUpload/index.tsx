@@ -64,7 +64,9 @@ const DocumentUpload: FC = () => {
       const formData = new FormData();
       
       formData.append('title', values.title);
-      formData.append('description', values.description);
+      if (values.description && values.description.toString().trim().length > 0) {
+        formData.append('description', values.description.toString().trim());
+      }
       formData.append('price', values.price.toString());
       
       // Only append preview_pages if not in edit mode or if explicitly provided

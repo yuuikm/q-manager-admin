@@ -7,8 +7,10 @@ export const documentValidationSchema = Yup.object({
     .required('Название документа обязательно')
     .min(3, 'Название должно содержать минимум 3 символа'),
   description: Yup.string()
-    .required('Описание обязательно')
-    .min(10, 'Описание должно содержать минимум 10 символов'),
+    .transform((value) => (typeof value === 'string' ? value.trim() : value))
+    .nullable()
+    .notRequired()
+    .max(500, 'Описание не должно превышать 500 символов'),
   price: Yup.number()
     .required('Цена обязательна')
     .min(0, 'Цена не может быть отрицательной'),
@@ -63,7 +65,7 @@ export const documentFormFields: FormField[] = [
     type: 'textarea',
     label: 'Описание',
     placeholder: 'Введите описание документа',
-    required: true,
+    required: false,
     rows: 4,
   },
   {
