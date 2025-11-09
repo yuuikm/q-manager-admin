@@ -3,9 +3,9 @@ import Button from "./Button";
 
 export interface HeaderActionsProps {
   onUpload: () => void;
-  onCategories: () => void;
+  onCategories?: () => void;
   uploadLabel: string;
-  categoriesLabel: string;
+  categoriesLabel?: string;
 }
 
 const HeaderActions: React.FC<HeaderActionsProps> = ({
@@ -19,9 +19,11 @@ const HeaderActions: React.FC<HeaderActionsProps> = ({
       <Button onClick={onUpload} variant="primary">
         {uploadLabel}
       </Button>
-      <Button onClick={onCategories} variant="secondary">
-        {categoriesLabel}
-      </Button>
+      {onCategories && categoriesLabel && (
+        <Button onClick={onCategories} variant="secondary">
+          {categoriesLabel}
+        </Button>
+      )}
     </>
   );
 };

@@ -44,6 +44,12 @@ export const layoutMenuItems: LayoutMenuItem[] = [
     icon: '👥',
     isActive: (pathname: string) => pathname.startsWith(LINKS.usersLink),
   },
+  {
+    path: LINKS.internalDocumentsLink,
+    label: 'Внутренние документы',
+    icon: '📋',
+    isActive: (pathname: string) => pathname.startsWith(LINKS.internalDocumentsLink),
+  },
     {
         path: LINKS.usersLink,
         label: 'Подпись эцп',

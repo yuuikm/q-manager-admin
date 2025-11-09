@@ -15,11 +15,14 @@ export const courseValidationSchema = Yup.object({
   price: Yup.number()
     .required('Цена обязательна')
     .min(0, 'Цена не может быть отрицательной'),
-  type: Yup.string()
-    .required('Тип курса обязателен')
-    .oneOf(['online', 'self_learning', 'offline'], 'Неверный тип курса'),
-  category_id: Yup.number()
-    .required('Категория обязательна'),
+  type: Yup.array()
+    .of(Yup.string().oneOf(['online', 'self_learning', 'offline']))
+    .min(1, 'Выберите хотя бы один тип курса')
+    .max(3, 'Можно выбрать максимум 3 типа курса')
+    .required('Тип курса обязателен'),
+  category_id: Yup.string()
+    .required('Категория обязательна')
+    .min(2, 'Название категории должно содержать минимум 2 символа'),
   featured_image: Yup.mixed()
     .nullable()
     .test('fileSize', 'Изображение слишком большое (максимум 5MB)', (value) => {
@@ -96,21 +99,16 @@ export const courseFormFields: FormField[] = [
   },
   {
     name: 'type',
-    type: 'select',
-    label: 'Тип курса',
+    type: 'custom',
+    label: 'Тип курса (можно выбрать до 3 типов)',
     placeholder: 'Выберите тип курса',
     required: true,
-    options: [
-      { value: 'online', label: 'Онлайн' },
-      { value: 'self_learning', label: 'Самообучение' },
-      { value: 'offline', label: 'Офлайн' },
-    ],
   },
   {
     name: 'category_id',
     type: 'searchable-select',
     label: 'Категория',
-    placeholder: 'Выберите категорию',
+    placeholder: 'Введите название категории или выберите существующую',
     required: true,
     options: [],
   },
@@ -182,8 +180,10 @@ export const getCourseInitialValues = (editMode: boolean, courseData: any, onMat
   description: editMode && courseData ? courseData.description : '',
   content: editMode && courseData ? courseData.content : '',
   price: editMode && courseData ? courseData.price : 0,
-  type: editMode && courseData ? courseData.type : 'online',
-  category_id: editMode && courseData ? courseData.category?.id : '',
+  type: editMode && courseData 
+    ? (Array.isArray(courseData.type) ? courseData.type : [courseData.type])
+    : ['online'],
+  category_id: editMode && courseData ? courseData.category?.name : '',
   featured_image: null,
   max_students: editMode && courseData ? courseData.max_students : 50,
   duration_hours: editMode && courseData ? courseData.duration_hours : 40,

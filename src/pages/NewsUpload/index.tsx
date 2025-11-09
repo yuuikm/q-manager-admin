@@ -78,7 +78,12 @@ const NewsUpload: FC = () => {
       const formData = new FormData();
       
       formData.append('title', values.title);
-      formData.append('description', values.description);
+      if (values.description) {
+        formData.append('description', values.description);
+      }
+      if (values.video_link) {
+        formData.append('video_link', values.video_link);
+      }
       formData.append('content', values.content);
       
       // Handle category - send the category name directly

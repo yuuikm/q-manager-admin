@@ -1,4 +1,4 @@
-export const API_BASE_URL = 'http://localhost:8000/api';
+export const API_BASE_URL = 'https://back.q-manager.kz/api';
 
 export const AUTH_ENDPOINTS = {
   LOGIN: `${API_BASE_URL}/auth/login`,
@@ -42,6 +42,9 @@ export const ADMIN_ENDPOINTS = {
   // Users
   USERS: `${API_BASE_URL}/admin/users`,
   TOGGLE_USER_ADMIN: `${API_BASE_URL}/admin/users`,
+  
+  // Internal Documents
+  INTERNAL_DOCUMENTS: `${API_BASE_URL}/admin/internal-documents`,
   
   // Categories (legacy)
   CATEGORIES: `${API_BASE_URL}/admin/categories`,

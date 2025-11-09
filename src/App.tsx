@@ -21,6 +21,9 @@ import NewsList from "pages/NewsList";
 import NewsCategories from "pages/NewsCategories";
 import Tests from "pages/Tests";
 import Users from "pages/Users";
+import InternalDocumentList from "pages/InternalDocumentList";
+import InternalDocumentUpload from "pages/InternalDocumentUpload";
+import InternalDocumentView from "pages/InternalDocumentView";
 import RouteWrapper from "components/RouteWrapper";
 import "./App.css";
 import { LINKS } from "constants/routes.ts";
@@ -176,6 +179,30 @@ function AppContent() {
         element={
           <RouteWrapper>
             <Users />
+          </RouteWrapper>
+        } 
+      />
+      <Route 
+        path={LINKS.internalDocumentsLink} 
+        element={
+          <RouteWrapper>
+            <InternalDocumentList />
+          </RouteWrapper>
+        } 
+      />
+      <Route
+        path={LINKS.internalDocumentsUploadLink}
+        element={
+          <RouteWrapper>
+            <InternalDocumentUpload />
+          </RouteWrapper>
+        }
+      />
+      <Route 
+        path={LINKS.internalDocumentsViewLink} 
+        element={
+          <RouteWrapper>
+            <InternalDocumentView />
           </RouteWrapper>
         } 
       />

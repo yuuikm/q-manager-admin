@@ -7,8 +7,17 @@ export const newsValidationSchema = Yup.object({
     .required("Заголовок новости обязателен")
     .min(5, "Заголовок должен содержать минимум 5 символов"),
   description: Yup.string()
-    .required("Краткое описание обязательно")
-    .min(20, "Описание должно содержать минимум 20 символов"),
+    .nullable()
+    .test('min-length', 'Описание должно содержать минимум 20 символов', function(value) {
+      if (!value || value.length === 0) return true;
+      return value.length >= 20;
+    }),
+  video_link: Yup.string()
+    .nullable()
+    .test('url', 'Введите корректную ссылку на видео', function(value) {
+      if (!value || value.length === 0) return true;
+      return Yup.string().url().isValidSync(value);
+    }),
   content: Yup.string()
     .required("Содержимое новости обязательно")
     .min(100, "Содержимое должно содержать минимум 100 символов"),
@@ -57,8 +66,15 @@ export const newsFormFields: FormField[] = [
     type: "textarea",
     label: "Краткое описание",
     placeholder: "Введите краткое описание новости",
-    required: true,
+    required: false,
     rows: 3,
+  },
+  {
+    name: "video_link",
+    type: "text",
+    label: "Ссылка на видео",
+    placeholder: "Введите ссылку на YouTube видео",
+    required: false,
   },
   {
     name: "content",
@@ -100,6 +116,7 @@ export const getNewsInitialValues = (editMode: boolean, newsData: any) => ({
   editMode,
   title: editMode && newsData ? newsData.title : "",
   description: editMode && newsData ? newsData.description : "",
+  video_link: editMode && newsData ? newsData.video_link : "",
   content: editMode && newsData ? newsData.content : "",
   category: editMode && newsData ? newsData.category?.name : "",
   image: null,

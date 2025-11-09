@@ -13,4 +13,7 @@ export const LINKS = {
   newsCategoryLink: '/news/categories',
   testsLink: '/tests',
   usersLink: '/users',
+  internalDocumentsLink: '/internal-documents',
+  internalDocumentsUploadLink: '/internal-documents/upload',
+  internalDocumentsViewLink: '/internal-documents/:id',
 };

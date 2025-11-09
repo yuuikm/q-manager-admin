@@ -2,32 +2,40 @@ import React from "react";
 
 export interface ActionsProps {
   onEdit: () => void;
-  onToggleStatus: () => void;
+  onToggleStatus?: () => void;
   onDelete: () => void;
+  onView?: () => void;
   onDuplicate?: () => void;
   isActive?: boolean;
   isPublished?: boolean;
   editLabel?: string;
   toggleLabel?: string;
   deleteLabel?: string;
+  viewLabel?: string;
   duplicateLabel?: string;
   showToggle?: boolean;
+  showToggleStatus?: boolean;
   showDuplicate?: boolean;
+  showView?: boolean;
 }
 
 const Actions: React.FC<ActionsProps> = ({
   onEdit,
   onToggleStatus,
   onDelete,
+  onView,
   onDuplicate,
   isActive,
   isPublished,
   editLabel = "Редактировать",
   toggleLabel = "Переключить статус",
   deleteLabel = "Удалить",
+  viewLabel = "Просмотреть",
   duplicateLabel = "Дублировать",
   showToggle = true,
+  showToggleStatus = true,
   showDuplicate = false,
+  showView = false,
 }) => {
   // Determine status for toggle button
   const getStatus = () => {
@@ -56,8 +64,32 @@ const Actions: React.FC<ActionsProps> = ({
         </svg>
       </button>
 
+      {/* View Button */}
+      {showView && onView && (
+        <button
+          onClick={onView}
+          className="p-2 text-green-600 hover:text-green-900 hover:bg-green-50 rounded-lg transition-colors"
+          title={viewLabel}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+            />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+            />
+          </svg>
+        </button>
+      )}
+
       {/* Toggle Status Button */}
-      {showToggle && (
+      {showToggle && showToggleStatus && onToggleStatus && (
         <button
           onClick={onToggleStatus}
           className={`p-2 rounded-lg transition-colors ${
