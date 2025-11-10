@@ -84,7 +84,9 @@ const NewsUpload: FC = () => {
       if (values.video_link) {
         formData.append('video_link', values.video_link);
       }
-      formData.append('content', values.content);
+      if (values.content) {
+        formData.append('content', values.content);
+      }
       
       // Handle category - send the category name directly
       const categoryName = values.category.trim();

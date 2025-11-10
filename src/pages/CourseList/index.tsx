@@ -15,7 +15,7 @@ interface Course {
   description: string;
   content: string;
   price: number;
-  type: 'online' | 'self_learning' | 'offline';
+  type: ('online' | 'self_learning' | 'offline')[] | 'online' | 'self_learning' | 'offline';
   category: {
     id: number;
     name: string;

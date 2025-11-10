@@ -4,17 +4,20 @@ import {
 } from "@/components/shared/DataTable";
 
 // Utility functions
-export const getTypeLabel = (type: string) => {
-  switch (type) {
-    case "online":
-      return "Онлайн";
-    case "self_learning":
-      return "Самообучение";
-    case "offline":
-      return "Офлайн";
-    default:
-      return type;
+const TYPE_LABELS: Record<string, string> = {
+  online: "Онлайн",
+  offline: "Оффлайн",
+  self_learning: "Дистанционное обучение",
+};
+
+export const getTypeLabel = (type: string | string[]) => {
+  if (Array.isArray(type)) {
+    return type
+      .map((item) => TYPE_LABELS[item] ?? item)
+      .join(" • ");
   }
+
+  return TYPE_LABELS[type] ?? type;
 };
 
 export const formatPrice = (price: number) => {

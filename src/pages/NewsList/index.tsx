@@ -78,23 +78,47 @@ const NewsList: FC = () => {
         return;
       }
 
-      const response = await fetch(ADMIN_ENDPOINTS.NEWS, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const [publishedResponse, draftsResponse] = await Promise.all([
+        fetch(`${ADMIN_ENDPOINTS.NEWS}?published=1`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }),
+        fetch(`${ADMIN_ENDPOINTS.NEWS}?published=0`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }),
+      ]);
 
-      if (response.ok) {
-        const data = await response.json();
-        setNews(data.data || data);
-        setError(null);
-      } else if (response.status === 401) {
-        // Handle unauthorized - token expired
+      if (publishedResponse.status === 401 || draftsResponse.status === 401) {
         localStorage.removeItem('auth_token');
         navigate(LINKS.loginLink);
+        return;
+      }
+
+      if (publishedResponse.ok || draftsResponse.ok) {
+        const [publishedData, draftsData] = await Promise.all([
+          publishedResponse.ok ? publishedResponse.json() : Promise.resolve({ data: [] }),
+          draftsResponse.ok ? draftsResponse.json() : Promise.resolve({ data: [] }),
+        ]);
+
+        const publishedList = (publishedData?.data ?? publishedData ?? []) as News[];
+        const draftsList = (draftsData?.data ?? draftsData ?? []) as News[];
+
+        const map: Record<number, News> = {};
+        [...publishedList, ...draftsList].forEach(item => {
+          map[item.id] = item;
+        });
+
+        setNews(Object.values(map));
+        setError(null);
       } else {
-        const errorData = await response.json().catch(() => ({}));
+        const errorData = publishedResponse.ok
+          ? await draftsResponse.json().catch(() => ({}))
+          : await publishedResponse.json().catch(() => ({}));
         setError(errorData.message || 'Не удалось загрузить новости');
       }
     } catch (error) {

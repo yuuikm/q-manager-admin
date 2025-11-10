@@ -28,6 +28,11 @@ const CourseUpload: FC = () => {
   }>({ type: null, message: '' });
   const [categories, setCategories] = useState<Category[]>([]);
   const [materials, setMaterials] = useState<any[]>([]);
+  const typeOptions = [
+    { value: 'online', label: 'Онлайн' },
+    { value: 'offline', label: 'Оффлайн' },
+    { value: 'self_learning', label: 'Дистанционное обучение' },
+  ];
   
   // Handle materials change from MaterialsManager
   const handleMaterialsChange = (newMaterials: any[]) => {
@@ -97,17 +102,15 @@ const CourseUpload: FC = () => {
       formData.append('description', values.description);
       formData.append('content', values.content);
       formData.append('price', values.price.toString());
-      formData.append('type', values.type);
-      // Backend expects category name, not ID
-      const selectedCategory = categories.find(cat => cat.id === Number(values.category_id));
-      if (!selectedCategory) {
-        setUploadStatus({ type: 'error', message: 'Пожалуйста, выберите категорию' });
+      const typeValue = Array.isArray(values.type) ? values.type : [values.type].filter(Boolean);
+      formData.append('type', JSON.stringify(typeValue));
+      const categoryName = (values.category || '').trim();
+      if (!categoryName) {
+        setUploadStatus({ type: 'error', message: 'Пожалуйста, введите название категории' });
         setUploading(false);
         return;
       }
-      formData.append('category', selectedCategory.name);
-      formData.append('max_students', values.max_students.toString());
-      formData.append('duration_hours', values.duration_hours.toString());
+      formData.append('category', categoryName);
       // Only append optional fields if they have values
       if (values.requirements && values.requirements.trim()) {
         formData.append('requirements', values.requirements);
@@ -301,12 +304,74 @@ const CourseUpload: FC = () => {
 
   // Update category options in form fields
   const categoryOptions: SelectOption[] = categories.map(cat => ({
-    value: cat.id,
+    value: cat.name,
     label: cat.name,
   }));
 
   const formFields: FormField[] = courseFormFields.map(field => {
-    if (field.name === 'category_id') {
+    if (field.name === 'type') {
+      return {
+        ...field,
+        customRender: (_field: FormField, formik: any) => {
+          const selectedTypes: string[] = Array.isArray(formik.values.type)
+            ? formik.values.type
+            : [];
+
+          const handleToggleType = (value: string) => {
+            let updatedTypes: string[] = [];
+
+            if (selectedTypes.includes(value)) {
+              updatedTypes = selectedTypes.filter((type) => type !== value);
+            } else {
+              if (selectedTypes.length >= 3) {
+                formik.setFieldTouched('type', true, true);
+                return;
+              }
+              updatedTypes = [...selectedTypes, value];
+            }
+
+            formik.setFieldValue('type', updatedTypes);
+            formik.setFieldTouched('type', true, true);
+          };
+
+          const isMaxSelected = selectedTypes.length >= 3;
+
+          return (
+            <div className="space-y-2">
+              {typeOptions.map((option) => {
+                const isChecked = selectedTypes.includes(option.value);
+                const isDisabled = !isChecked && isMaxSelected;
+
+                return (
+                  <label
+                    key={option.value}
+                    className={`flex items-center space-x-2 rounded-md border border-gray-200 px-3 py-2 transition ${
+                      isDisabled
+                        ? 'cursor-not-allowed opacity-60'
+                        : 'cursor-pointer hover:border-blue-400'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => handleToggleType(option.value)}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      disabled={isDisabled}
+                    />
+                    <span className="text-sm text-gray-700">{option.label}</span>
+                  </label>
+                );
+              })}
+              <p className="text-xs text-gray-500">
+                Можно выбрать до трёх типов.
+              </p>
+            </div>
+          );
+        },
+      };
+    }
+
+     if (field.name === 'category') {
       return {
         ...field,
         options: categoryOptions,

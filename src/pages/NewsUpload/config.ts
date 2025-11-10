@@ -19,35 +19,30 @@ export const newsValidationSchema = Yup.object({
       return Yup.string().url().isValidSync(value);
     }),
   content: Yup.string()
-    .required("Содержимое новости обязательно")
-    .min(100, "Содержимое должно содержать минимум 100 символов"),
+    .nullable(),
   category: Yup.string()
     .required("Категория обязательна")
     .min(2, "Название категории должно содержать минимум 2 символа"),
-  image: Yup.mixed().when("editMode", {
-    is: true,
-    then: (schema) => schema.nullable(),
-    otherwise: (schema) =>
-      schema
-        .test(
-          "fileSize",
-          "Изображение слишком большое (максимум 5MB)",
-          (value) => {
-            if (!value) return true;
-            return (value as File).size <= 5 * 1024 * 1024;
-          },
-        )
-        .test("fileType", "Неподдерживаемый тип изображения", (value) => {
-          if (!value) return true;
-          const allowedTypes = [
-            "image/jpeg",
-            "image/png",
-            "image/gif",
-            "image/webp",
-          ];
-          return allowedTypes.includes((value as File).type);
-        }),
-  }),
+  image: Yup.mixed()
+    .nullable()
+    .test(
+      "fileSize",
+      "Изображение слишком большое (максимум 5MB)",
+      (value) => {
+        if (!value) return true;
+        return (value as File).size <= 5 * 1024 * 1024;
+      },
+    )
+    .test("fileType", "Неподдерживаемый тип изображения", (value) => {
+      if (!value) return true;
+      const allowedTypes = [
+        "image/jpeg",
+        "image/png",
+        "image/gif",
+        "image/webp",
+      ];
+      return allowedTypes.includes((value as File).type);
+    }),
   is_published: Yup.boolean(),
   is_featured: Yup.boolean(),
 });
@@ -81,7 +76,7 @@ export const newsFormFields: FormField[] = [
     type: "textarea",
     label: "Содержимое новости",
     placeholder: "Введите полное содержимое новости",
-    required: true,
+    required: false,
     rows: 10,
   },
   {

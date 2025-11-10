@@ -20,7 +20,7 @@ export const courseValidationSchema = Yup.object({
     .min(1, 'Выберите хотя бы один тип курса')
     .max(3, 'Можно выбрать максимум 3 типа курса')
     .required('Тип курса обязателен'),
-  category_id: Yup.string()
+  category: Yup.string()
     .required('Категория обязательна')
     .min(2, 'Название категории должно содержать минимум 2 символа'),
   featured_image: Yup.mixed()
@@ -98,7 +98,7 @@ export const courseFormFields: FormField[] = [
     required: true,
   },
   {
-    name: 'category_id',
+    name: 'category',
     type: 'searchable-select',
     label: 'Категория',
     placeholder: 'Введите название категории или выберите существующую',
@@ -161,7 +161,7 @@ export const getCourseInitialValues = (editMode: boolean, courseData: any, onMat
   type: editMode && courseData 
     ? (Array.isArray(courseData.type) ? courseData.type : [courseData.type])
     : ['online'],
-  category_id: editMode && courseData ? courseData.category?.name : '',
+  category: editMode && courseData ? courseData.category?.name : '',
   featured_image: null,
   // removed max_students and duration_hours
   requirements: editMode && courseData ? courseData.requirements : '',
