@@ -91,6 +91,7 @@ const Tests = () => {
     time_limit_minutes: 60,
     passing_score: 70,
     max_attempts: 3,
+    total_questions: null as number | null,
     is_active: true,
     questions: [] as Question[],
   });
@@ -256,6 +257,7 @@ const Tests = () => {
       time_limit_minutes: 60,
       passing_score: 70,
       max_attempts: 3,
+      total_questions: null,
       is_active: true,
       questions: [],
     });
@@ -270,6 +272,7 @@ const Tests = () => {
       time_limit_minutes: test.time_limit_minutes,
       passing_score: test.passing_score,
       max_attempts: test.max_attempts,
+      total_questions: (test as any).total_questions || null,
       is_active: test.is_active,
       questions: test.questions,
     });
@@ -568,13 +571,13 @@ const Tests = () => {
     <div className="space-y-6">
       <div className="admin-card">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-semibold text-gray-800">Tests Management</h2>
+          <h2 className="text-2xl font-semibold text-gray-800">Управление тестами</h2>
           <div className="flex space-x-3">
             <Button onClick={openExcelModal} variant="secondary">
-              Upload from Excel
+              Загрузить из Excel
             </Button>
             <Button onClick={openModal} variant="primary">
-              Create New Test
+              Создать новый тест
             </Button>
           </div>
         </div>
@@ -822,6 +825,35 @@ const Tests = () => {
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Всего вопросов в тесте {formData.questions.length > 0 && `(из ${formData.questions.length} загруженных)`}
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max={formData.questions.length || 999}
+                      value={formData.total_questions || formData.questions.length || ''}
+                      onChange={(e) => {
+                        const value = Number(e.target.value);
+                        const maxValue = formData.questions.length || 999;
+                        setFormData({
+                          ...formData,
+                          total_questions: value > maxValue ? maxValue : (value < 1 ? null : value)
+                        });
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Оставьте пустым для использования всех вопросов"
+                    />
+                    {formData.questions.length > 0 && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        {formData.total_questions 
+                          ? `Студенты получат случайные ${formData.total_questions} вопросов из ${formData.questions.length} загруженных`
+                          : `Все ${formData.questions.length} вопросов будут использованы`}
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 {/* Questions Section */}
@@ -918,19 +950,38 @@ const Tests = () => {
                                 {question.options?.map((option, optionIndex) => (
                                   <div key={optionIndex} className="flex items-center space-x-2">
                                     <input
+                                      type="checkbox"
+                                      checked={option === question.correct_answer}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          updateQuestion(questionIndex, 'correct_answer', option);
+                                        }
+                                      }}
+                                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                      title="Правильный ответ"
+                                    />
+                                    <input
                                       type="text"
                                       required
                                       value={option}
-                                      onChange={(e) => updateOption(questionIndex, optionIndex, e.target.value)}
+                                      onChange={(e) => {
+                                        const oldValue = option;
+                                        const newValue = e.target.value;
+                                        updateOption(questionIndex, optionIndex, newValue);
+                                        // If this was the correct answer, update it too
+                                        if (question.correct_answer === oldValue) {
+                                          updateQuestion(questionIndex, 'correct_answer', newValue);
+                                        }
+                                      }}
                                       className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                       placeholder={`Вариант ${optionIndex + 1}`}
                                     />
                                     <button
                                       type="button"
                                       onClick={() => removeOption(questionIndex, optionIndex)}
-                                      className="text-red-600 hover:text-red-900"
+                                      className="text-red-600 hover:text-red-900 px-2"
                                     >
-                                      Remove
+                                      Удалить
                                     </button>
                                   </div>
                                 ))}
@@ -942,7 +993,7 @@ const Tests = () => {
                           {question.type === 'true_false' && (
                             <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Correct Answer *
+                                Правильный ответ *
                               </label>
                               <select
                                 required
@@ -950,18 +1001,18 @@ const Tests = () => {
                                 onChange={(e) => updateQuestion(questionIndex, 'correct_answer', e.target.value)}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                               >
-                                <option value="">Select Answer</option>
-                                <option value="true">True</option>
-                                <option value="false">False</option>
+                                <option value="">Выберите ответ</option>
+                                <option value="true">Верно</option>
+                                <option value="false">Неверно</option>
                               </select>
                             </div>
                           )}
 
-                          {/* Correct Answer for other types */}
-                          {question.type !== 'true_false' && (
+                          {/* Correct Answer for text type */}
+                          {question.type === 'text' && (
                             <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Correct Answer *
+                                Правильный ответ *
                               </label>
                               <input
                                 type="text"
@@ -969,14 +1020,14 @@ const Tests = () => {
                                 value={question.correct_answer}
                                 onChange={(e) => updateQuestion(questionIndex, 'correct_answer', e.target.value)}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                placeholder={question.type === 'text' ? 'Ожидаемый ответ' : 'Правильный вариант'}
+                                placeholder="Ожидаемый ответ"
                               />
                             </div>
                           )}
 
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Explanation (Optional)
+                              Объяснение (необязательно)
                             </label>
                             <textarea
                               value={question.explanation || ''}
@@ -1124,7 +1175,7 @@ const Tests = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Course</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Курс</label>
                     <select
                       value={parsedTest.course_id}
                       onChange={(e) => setParsedTest({...parsedTest, course_id: Number(e.target.value)})}
@@ -1136,7 +1187,7 @@ const Tests = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Time Limit (minutes)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Время выполнения (минуты)</label>
                     <input
                       type="number"
                       value={parsedTest.time_limit_minutes}
@@ -1145,7 +1196,7 @@ const Tests = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Passing Score (%)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Проходной балл (%)</label>
                     <input
                       type="number"
                       value={parsedTest.passing_score}
@@ -1153,10 +1204,33 @@ const Tests = () => {
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Всего вопросов в тесте (из {parsedTest.questions.length} загруженных)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max={parsedTest.questions.length}
+                      value={parsedTest.total_questions || parsedTest.questions.length}
+                      onChange={(e) => {
+                        const value = Number(e.target.value);
+                        const maxValue = parsedTest.questions.length;
+                        setParsedTest({
+                          ...parsedTest, 
+                          total_questions: value > maxValue ? maxValue : (value < 1 ? 1 : value)
+                        });
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Студенты получат случайные {parsedTest.total_questions || parsedTest.questions.length} вопросов из {parsedTest.questions.length} загруженных
+                    </p>
+                  </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Описание</label>
                   <textarea
                     value={parsedTest.description || ''}
                     onChange={(e) => setParsedTest({...parsedTest, description: e.target.value})}
@@ -1166,33 +1240,49 @@ const Tests = () => {
                 </div>
 
                 <div>
-                  <h4 className="text-lg font-semibold text-gray-900 mb-4">Questions ({parsedTest.questions.length})</h4>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-4">Вопросы ({parsedTest.questions.length})</h4>
                   <div className="space-y-4 max-h-96 overflow-y-auto">
                     {parsedTest.questions.map((question: any, index: number) => (
                       <div key={index} className="border border-gray-200 rounded-lg p-4">
                         <div className="mb-2">
-                          <span className="text-sm font-medium text-gray-500">Question {index + 1}:</span>
+                          <span className="text-sm font-medium text-gray-500">Вопрос {index + 1}:</span>
                           <p className="text-gray-900">{question.question}</p>
                         </div>
                         
                         {question.options && question.options.length > 0 && (
                           <div className="mb-2">
-                            <span className="text-sm font-medium text-gray-500">Answer Options:</span>
-                            <ul className="list-disc list-inside mt-1">
+                            <span className="text-sm font-medium text-gray-500 block mb-2">Варианты ответов (выберите правильный):</span>
+                            <div className="space-y-1">
                               {question.options.map((option: string, optIndex: number) => (
-                                <li key={optIndex} className={`text-sm ${
-                                  option === question.correct_answer ? 'text-green-600 font-semibold' : 'text-gray-700'
+                                <label key={optIndex} className={`flex items-center space-x-2 p-2 rounded cursor-pointer hover:bg-gray-50 ${
+                                  option === question.correct_answer ? 'bg-green-50 border border-green-200' : 'border border-gray-200'
                                 }`}>
-                                  {option}
-                                  {option === question.correct_answer && ' ✓'}
-                                </li>
+                                  <input
+                                    type="checkbox"
+                                    checked={option === question.correct_answer}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        const updatedQuestions = [...parsedTest.questions];
+                                        updatedQuestions[index].correct_answer = option;
+                                        setParsedTest({...parsedTest, questions: updatedQuestions});
+                                      }
+                                    }}
+                                    className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                                  />
+                                  <span className={`text-sm flex-1 ${
+                                    option === question.correct_answer ? 'text-green-600 font-semibold' : 'text-gray-700'
+                                  }`}>
+                                    {option}
+                                    {option === question.correct_answer && ' ✓'}
+                                  </span>
+                                </label>
                               ))}
-                            </ul>
+                            </div>
                           </div>
                         )}
                         
-                        <div className="text-xs text-gray-500">
-                          Type: {question.type} | Points: {question.points}
+                        <div className="text-xs text-gray-500 mt-2">
+                          Тип: {question.type} | Баллы: {question.points}
                         </div>
                       </div>
                     ))}
@@ -1205,14 +1295,14 @@ const Tests = () => {
                     onClick={() => setShowExcelPreview(false)}
                     className="admin-button admin-button-secondary cursor-pointer"
                   >
-                    Back
+                    Назад
                   </button>
                   <button
                     type="button"
                     onClick={() => handleExcelTestSave(parsedTest)}
                     className="admin-button admin-button-primary cursor-pointer"
                   >
-                    Save Test
+                    Сохранить тест
                   </button>
                 </div>
               </div>
