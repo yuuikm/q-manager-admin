@@ -567,57 +567,21 @@ const Tests = () => {
     );
   }
 
+  const headerActions = (
+    <div className="flex space-x-3">
+      <Button onClick={openExcelModal} variant="secondary">
+        Загрузить из Excel
+      </Button>
+      <Button onClick={openModal} variant="primary">
+        Создать новый тест
+      </Button>
+    </div>
+  );
+
   return (
-    <div className="space-y-6">
-      <div className="admin-card">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-semibold text-gray-800">Управление тестами</h2>
-          <div className="flex space-x-3">
-            <Button onClick={openExcelModal} variant="secondary">
-              Загрузить из Excel
-            </Button>
-            <Button onClick={openModal} variant="primary">
-              Создать новый тест
-            </Button>
-          </div>
-        </div>
-
-        {/* Course Filter */}
-        <div className="mb-6">
-          <div className="flex items-center space-x-4">
-            <label className="text-sm font-medium text-gray-700">Filter by Course:</label>
-            <select
-              value={selectedCourse}
-              onChange={(e) => {
-                setSelectedCourse(e.target.value);
-                // Refetch tests with new filter
-                setTimeout(() => fetchTests(), 100);
-              }}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Courses</option>
-              {courses.map((course) => (
-                <option key={course.id} value={course.id}>
-                  {course.title}
-                </option>
-              ))}
-            </select>
-            {selectedCourse && (
-              <button
-                onClick={() => {
-                  setSelectedCourse('');
-                  setTimeout(() => fetchTests(), 100);
-                }}
-                className="text-sm text-blue-600 hover:text-blue-900"
-              >
-                Clear Filter
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Custom render functions for columns */}
-        {(() => {
+    <>
+      {/* Custom render functions for columns */}
+      {(() => {
           const renderTestColumn = (test: Test) => (
             <div>
               <div className="text-sm font-medium text-gray-900 mb-1">
@@ -707,20 +671,20 @@ const Tests = () => {
 
           return (
             <DataTable
-              title=""
-              description=""
+              title="Управление тестами"
+              description="Список всех созданных тестов"
               data={tests}
               columns={enhancedColumns}
               actions={enhancedActions}
-              loading={false}
+              loading={loading}
               error={null}
               emptyMessage="Тесты не найдены"
               emptyDescription="Создайте первый тест для начала работы"
               totalCount={tests.length}
+              headerActions={headerActions}
             />
           );
         })()}
-      </div>
 
       {/* Modal */}
       {showModal && (
@@ -1310,7 +1274,7 @@ const Tests = () => {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 };
 
