@@ -1,4 +1,4 @@
-import { type FC, useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppSelector } from 'store/hooks';
 import { ADMIN_ENDPOINTS } from 'constants/endpoints';
@@ -7,64 +7,45 @@ import HeaderActions from '@/components/shared/HeaderActions';
 import { documentColumns, documentActions, formatFileSize, formatDate } from './config';
 import Actions from '@/components/shared/Actions';
 import { LINKS } from '@/constants/routes';
+import { adminAPI, Document as ApiDocument } from '@/api/admin';
 
-interface Document {
-  id: number;
-  title: string;
-  description: string;
-  category: {
-    id: number;
-    name: string;
-  } | null;
-  price: number;
-  file_name: string;
-  file_type: string;
-  file_size: number;
-  buy_number: number;
-  is_active: boolean;
-  created_at: string;
-  creator: {
-    id: number;
-    username: string;
-    email: string;
-  };
+// Extend ApiDocument to include properties used in this view if they are missing
+interface ViewDocument extends ApiDocument {
+  buy_number?: number;
+  category_name?: string; // If category is returned as string in api.ts but we need to handle object case too
 }
 
-const DocumentList: FC = () => {
+const DocumentList = () => {
   const navigate = useNavigate();
-  const { token } = useAppSelector((state: any) => state.auth);
-  const [documents, setDocuments] = useState<Document[]>([]);
+  const { token } = useAppSelector((state) => state.auth);
+  const [documents, setDocuments] = useState<ViewDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pagination, setPagination] = useState<{
+    current_page: number;
+    last_page: number;
+    total: number;
+    per_page: number;
+  } | undefined>(undefined);
+  const [authors, setAuthors] = useState<{ id: number; name: string }[]>([]);
+  const [filters, setFilters] = useState({
+    search: "",
+    start_date: "",
+    end_date: "",
+    author_id: "",
+    page: 1
+  });
 
-  useEffect(() => {
-    fetchDocuments();
-    
-    // Event listeners for actions
-    const handleEditDocument = (event: CustomEvent) => {
-      handleEditDocumentAction(event.detail);
-    };
-    
-    const handleToggleStatus = (event: CustomEvent) => {
-      handleToggleStatusAction(event.detail.id, event.detail.currentStatus);
-    };
-    
-    const handleDeleteDocument = (event: CustomEvent) => {
-      handleDeleteDocumentAction(event.detail);
-    };
-
-    window.addEventListener('editDocument', handleEditDocument as EventListener);
-    window.addEventListener('toggleDocumentStatus', handleToggleStatus as EventListener);
-    window.addEventListener('deleteDocument', handleDeleteDocument as EventListener);
-
-    return () => {
-      window.removeEventListener('editDocument', handleEditDocument as EventListener);
-      window.removeEventListener('toggleDocumentStatus', handleToggleStatus as EventListener);
-      window.removeEventListener('deleteDocument', handleDeleteDocument as EventListener);
-    };
+  const fetchAuthors = useCallback(async () => {
+    try {
+      const data = await adminAPI.getAdmins();
+      setAuthors(data);
+    } catch (err) {
+      console.error('Error fetching authors:', err);
+    }
   }, []);
 
-  const fetchDocuments = async () => {
+  const fetchDocuments = useCallback(async () => {
     try {
       if (!token) {
         setError('Токен авторизации не найден');
@@ -72,7 +53,65 @@ const DocumentList: FC = () => {
         return;
       }
 
-      const response = await fetch(ADMIN_ENDPOINTS.GET_DOCUMENTS, {
+      setLoading(true);
+      const response = await adminAPI.getDocuments(filters);
+      // Explicitly cast to ViewDocument[] because we know the response has these extra properties
+      setDocuments((response.data || []) as ViewDocument[]);
+      if (response.current_page) {
+        setPagination({
+          current_page: response.current_page,
+          last_page: response.last_page,
+          total: response.total,
+          per_page: response.per_page
+        });
+      } else {
+        setPagination(undefined);
+      }
+      setError(null);
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Произошла ошибка при загрузке документов';
+      console.error('Ошибка загрузки документов:', err);
+      setError(errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  }, [filters, token]);
+
+  useEffect(() => {
+    fetchAuthors();
+  }, [fetchAuthors]);
+
+  useEffect(() => {
+    fetchDocuments();
+  }, [fetchDocuments]);
+
+  const handleSearch = useCallback((value: string) => {
+    setFilters((prev) => {
+      if (prev.search === value) return prev;
+      return { ...prev, search: value, page: 1 };
+    });
+  }, []);
+
+  const handleFilterChange = useCallback((newFilters: Record<string, string | number | boolean | null | undefined>) => {
+    setFilters((prev) => ({ ...prev, ...newFilters, page: 1 }));
+  }, []);
+
+  const handlePageChange = useCallback((page: number) => {
+    setFilters((prev) => {
+      if (prev.page === page) return prev;
+      return { ...prev, page };
+    });
+  }, []);
+
+  const handleToggleStatusAction = useCallback(async (id: number, currentStatus: boolean) => {
+    try {
+      if (!token) {
+        alert('Токен авторизации не найден');
+        return;
+      }
+
+      const response = await fetch(`${ADMIN_ENDPOINTS.TOGGLE_DOCUMENT_STATUS}/${id}/toggle-status`, {
+        method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -80,26 +119,26 @@ const DocumentList: FC = () => {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        setDocuments(data.data || []);
-        setError(null);
+        setDocuments(prevDocuments =>
+          prevDocuments.map(doc =>
+            doc.id === id ? { ...doc, is_active: !currentStatus } : doc
+          )
+        );
+        alert(`Документ ${!currentStatus ? 'активирован' : 'деактивирован'} успешно`);
       } else if (response.status === 401) {
-        // Handle unauthorized - token expired
         localStorage.removeItem('auth_token');
         navigate(LINKS.loginLink);
       } else {
         const errorData = await response.json().catch(() => ({}));
-        setError(errorData.message || 'Не удалось загрузить документы');
+        alert(errorData.message || 'Не удалось изменить статус документа');
       }
-    } catch (error) {
-      console.error('Ошибка загрузки документов:', error);
-      setError('Произошла ошибка при загрузке документов');
-    } finally {
-      setLoading(false);
+    } catch (err) {
+      console.error('Ошибка изменения статуса документа:', err);
+      alert('Произошла ошибка при изменении статуса документа');
     }
-  };
+  }, [token, navigate]);
 
-  const handleDeleteDocumentAction = async (id: number) => {
+  const handleDeleteDocumentAction = useCallback(async (id: number) => {
     if (!confirm('Вы уверены, что хотите удалить этот документ?')) {
       return;
     }
@@ -119,69 +158,53 @@ const DocumentList: FC = () => {
       });
 
       if (response.ok) {
-        // Use functional update to avoid stale closure
         setDocuments(prevDocuments => prevDocuments.filter(doc => doc.id !== id));
         alert('Документ успешно удален');
       } else if (response.status === 401) {
-        // Handle unauthorized - token expired
         localStorage.removeItem('auth_token');
         navigate(LINKS.loginLink);
       } else {
         const errorData = await response.json().catch(() => ({}));
         alert(errorData.message || 'Не удалось удалить документ');
       }
-    } catch (error) {
-      console.error('Ошибка удаления документа:', error);
+    } catch (err) {
+      console.error('Ошибка удаления документа:', err);
       alert('Произошла ошибка при удалении документа');
     }
-  };
+  }, [token, navigate]);
 
-  const handleToggleStatusAction = async (id: number, currentStatus: boolean) => {
-    try {
-      if (!token) {
-        alert('Токен авторизации не найден');
-        return;
+  const handleEditDocumentAction = useCallback((document: ViewDocument) => {
+    navigate(LINKS.documentsUploadLink, {
+      state: {
+        editMode: true,
+        documentData: document
       }
-
-      const response = await fetch(`${ADMIN_ENDPOINTS.TOGGLE_DOCUMENT_STATUS}/${id}/toggle-status`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        // Use functional update to avoid stale closure
-        setDocuments(prevDocuments => 
-          prevDocuments.map(doc => 
-            doc.id === id ? { ...doc, is_active: !currentStatus } : doc
-          )
-        );
-        alert(`Документ ${!currentStatus ? 'активирован' : 'деактивирован'} успешно`);
-      } else if (response.status === 401) {
-        // Handle unauthorized - token expired
-        localStorage.removeItem('auth_token');
-        navigate(LINKS.loginLink);
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        alert(errorData.message || 'Не удалось изменить статус документа');
-      }
-    } catch (error) {
-      console.error('Ошибка изменения статуса документа:', error);
-      alert('Произошла ошибка при изменении статуса документа');
-    }
-  };
-
-  const handleEditDocumentAction = (document: Document) => {
-    // Navigate to upload page with document data for editing
-    navigate(LINKS.documentsUploadLink, { 
-      state: { 
-        editMode: true, 
-        documentData: document 
-      } 
     });
-  };
+  }, [navigate]);
+
+  useEffect(() => {
+    const handleEditDocument = (event: CustomEvent) => {
+      handleEditDocumentAction(event.detail);
+    };
+
+    const handleToggleStatus = (event: CustomEvent) => {
+      handleToggleStatusAction(event.detail.id, event.detail.currentStatus);
+    };
+
+    const handleDeleteDocument = (event: CustomEvent) => {
+      handleDeleteDocumentAction(event.detail);
+    };
+
+    window.addEventListener('editDocument', handleEditDocument as EventListener);
+    window.addEventListener('toggleDocumentStatus', handleToggleStatus as EventListener);
+    window.addEventListener('deleteDocument', handleDeleteDocument as EventListener);
+
+    return () => {
+      window.removeEventListener('editDocument', handleEditDocument as EventListener);
+      window.removeEventListener('toggleDocumentStatus', handleToggleStatus as EventListener);
+      window.removeEventListener('deleteDocument', handleDeleteDocument as EventListener);
+    };
+  }, [handleEditDocumentAction, handleToggleStatusAction, handleDeleteDocumentAction]);
 
   const headerActions = (
     <HeaderActions
@@ -192,8 +215,7 @@ const DocumentList: FC = () => {
     />
   );
 
-  // Custom render functions for columns
-  const renderDocumentColumn = (document: Document) => (
+  const renderDocumentColumn = useCallback((document: ViewDocument) => (
     <div>
       <div className="text-sm font-medium text-gray-900 mb-1">
         {document.title}
@@ -203,40 +225,41 @@ const DocumentList: FC = () => {
         📁 {document.file_name} • {formatFileSize(document.file_size)}
       </div>
       <div className="text-xs text-gray-400 mt-1">
-        💰 {document.buy_number} покупок • от {document.creator.username}
+        💰 {document.buy_number || 0} покупок • от {document.creator?.username || 'Системы'}
       </div>
     </div>
-  );
+  ), []);
 
-  const renderCategoryColumn = (document: Document) => (
+  const renderCategoryColumn = useCallback((document: ViewDocument) => (
     <div className="text-sm text-gray-900">
-      {document.category ? document.category.name : "Без категории"}
+      {typeof document.category === 'object' && document.category !== null
+        ? (document.category as { name: string }).name
+        : (document.category || "Без категории")}
     </div>
-  );
+  ), []);
 
-  const renderPriceColumn = (document: Document) => (
+  const renderPriceColumn = useCallback((document: ViewDocument) => (
     <div className="text-sm font-medium text-gray-900">{document.price}₸</div>
-  );
+  ), []);
 
-  const renderStatusColumn = (document: Document) => (
+  const renderStatusColumn = useCallback((document: ViewDocument) => (
     <span
-      className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-        document.is_active
-          ? "bg-green-100 text-green-800"
-          : "bg-red-100 text-red-800"
-      }`}
+      className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${document.is_active
+        ? "bg-green-100 text-green-800"
+        : "bg-red-100 text-red-800"
+        }`}
     >
       {document.is_active ? "Активен" : "Неактивен"}
     </span>
-  );
+  ), []);
 
-  const renderCreatedAtColumn = (document: Document) => (
+  const renderCreatedAtColumn = useCallback((document: ViewDocument) => (
     <div className="text-sm text-gray-500">
       {formatDate(document.created_at)}
     </div>
-  );
+  ), []);
 
-  const renderActionsColumn = (document: Document) => (
+  const renderActionsColumn = useCallback((document: ViewDocument) => (
     <Actions
       onEdit={() => {
         window.dispatchEvent(
@@ -259,27 +282,25 @@ const DocumentList: FC = () => {
       editLabel="Редактировать документ"
       deleteLabel="Удалить документ"
     />
-  );
+  ), []);
 
-  // Enhanced columns with render functions
-  const enhancedColumns = documentColumns.map(column => ({
+  const enhancedColumns = useMemo(() => documentColumns.map(column => ({
     ...column,
     render: column.key === 'document' ? renderDocumentColumn :
-            column.key === 'category' ? renderCategoryColumn :
-            column.key === 'price' ? renderPriceColumn :
-            column.key === 'status' ? renderStatusColumn :
+      column.key === 'category' ? renderCategoryColumn :
+        column.key === 'price' ? renderPriceColumn :
+          column.key === 'status' ? renderStatusColumn :
             column.key === 'created_at' ? renderCreatedAtColumn :
-            undefined
-  }));
+              undefined
+  })), [renderDocumentColumn, renderCategoryColumn, renderPriceColumn, renderStatusColumn, renderCreatedAtColumn]);
 
-  // Enhanced actions with render function
-  const enhancedActions = documentActions.map(action => ({
+  const enhancedActions = useMemo(() => documentActions.map(action => ({
     ...action,
     render: action.key === 'actions' ? renderActionsColumn : undefined
-  }));
+  })), [renderActionsColumn]);
 
   return (
-    <DataTable
+    <DataTable<ViewDocument>
       title="Управление документами"
       description="Список всех загруженных документов"
       data={documents}
@@ -289,8 +310,13 @@ const DocumentList: FC = () => {
       error={error}
       emptyMessage="Документы не найдены"
       emptyDescription="Загрузите первый документ для начала работы"
-      totalCount={documents.length}
       headerActions={headerActions}
+      pagination={pagination}
+      authors={authors}
+      onSearch={handleSearch}
+      onFilterChange={handleFilterChange}
+      onPageChange={handlePageChange}
+      initialSearchValue={filters.search}
     />
   );
 };

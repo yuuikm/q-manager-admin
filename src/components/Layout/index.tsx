@@ -11,7 +11,7 @@ interface LayoutProps {
 const Layout: FC<LayoutProps> = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user } = useAppSelector((state: any) => state.auth);
+  const { user } = useAppSelector((state) => state.auth);
 
   const handleLogout = () => {
     localStorage.removeItem("auth_token");
@@ -45,9 +45,8 @@ const Layout: FC<LayoutProps> = ({ children }) => {
               <Link
                 key={item.path}
                 to={item.path}
-                className={`sidebar-item flex items-center px-4 py-3 rounded-lg text-sm font-medium ${
-                  isActive(item) ? "active" : ""
-                }`}
+                className={`sidebar-item flex items-center px-4 py-3 rounded-lg text-sm font-medium ${isActive(item) ? "active" : ""
+                  }`}
               >
                 <span className="text-lg mr-3">{item.icon}</span>
                 <span>{item.label}</span>

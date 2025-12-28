@@ -1,4 +1,4 @@
-import { type FC, useState, useEffect } from 'react';
+import { type FC, useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppSelector } from 'store/hooks';
 import DataTable from '@/components/shared/DataTable';
@@ -36,41 +36,34 @@ interface News {
   updated_at: string;
 }
 
+import { adminAPI } from '@/api/admin';
+
 const NewsList: FC = () => {
   const navigate = useNavigate();
-  const { token } = useAppSelector((state: any) => state.auth);
+  const { token } = useAppSelector((state) => state.auth);
   const [news, setNews] = useState<News[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pagination, setPagination] = useState<any>(null); // This can be properly typed as PaginationData
+  const [authors, setAuthors] = useState<{ id: number; name: string }[]>([]);
+  const [filters, setFilters] = useState({
+    search: "",
+    start_date: "",
+    end_date: "",
+    author_id: "",
+    page: 1
+  });
 
-  useEffect(() => {
-    fetchNews();
-    
-    // Event listeners for actions
-    const handleEditNews = (event: CustomEvent) => {
-      handleEditNewsAction(event.detail);
-    };
-    
-    const handleTogglePublishStatus = (event: CustomEvent) => {
-      handleTogglePublishStatusAction(event.detail.id, event.detail.currentStatus);
-    };
-    
-    const handleDeleteNews = (event: CustomEvent) => {
-      handleDeleteNewsAction(event.detail);
-    };
-
-    window.addEventListener('editNews', handleEditNews as EventListener);
-    window.addEventListener('toggleNewsPublishStatus', handleTogglePublishStatus as EventListener);
-    window.addEventListener('deleteNews', handleDeleteNews as EventListener);
-
-    return () => {
-      window.removeEventListener('editNews', handleEditNews as EventListener);
-      window.removeEventListener('toggleNewsPublishStatus', handleTogglePublishStatus as EventListener);
-      window.removeEventListener('deleteNews', handleDeleteNews as EventListener);
-    };
+  const fetchAuthors = useCallback(async () => {
+    try {
+      const data = await adminAPI.getAdmins();
+      setAuthors(data);
+    } catch (err) {
+      console.error('Error fetching authors:', err);
+    }
   }, []);
 
-  const fetchNews = async () => {
+  const fetchNews = useCallback(async () => {
     try {
       if (!token) {
         setError('Токен авторизации не найден');
@@ -78,47 +71,43 @@ const NewsList: FC = () => {
         return;
       }
 
-      const [publishedResponse, draftsResponse] = await Promise.all([
-        fetch(`${ADMIN_ENDPOINTS.NEWS}?published=1`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        }),
-        fetch(`${ADMIN_ENDPOINTS.NEWS}?published=0`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        }),
-      ]);
+      setLoading(true);
+      const url = new URL(ADMIN_ENDPOINTS.NEWS);
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== "" && value !== null) {
+          url.searchParams.append(key, String(value));
+        }
+      });
 
-      if (publishedResponse.status === 401 || draftsResponse.status === 401) {
+      const response = await fetch(url.toString(), {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.status === 401) {
         localStorage.removeItem('auth_token');
         navigate(LINKS.loginLink);
         return;
       }
 
-      if (publishedResponse.ok || draftsResponse.ok) {
-        const [publishedData, draftsData] = await Promise.all([
-          publishedResponse.ok ? publishedResponse.json() : Promise.resolve({ data: [] }),
-          draftsResponse.ok ? draftsResponse.json() : Promise.resolve({ data: [] }),
-        ]);
-
-        const publishedList = (publishedData?.data ?? publishedData ?? []) as News[];
-        const draftsList = (draftsData?.data ?? draftsData ?? []) as News[];
-
-        const map: Record<number, News> = {};
-        [...publishedList, ...draftsList].forEach(item => {
-          map[item.id] = item;
-        });
-
-        setNews(Object.values(map));
+      if (response.ok) {
+        const data = await response.json();
+        setNews(data.data || []);
+        if (data.current_page) {
+          setPagination({
+            current_page: data.current_page,
+            last_page: data.last_page,
+            total: data.total,
+            per_page: data.per_page
+          });
+        } else {
+          setPagination(null);
+        }
         setError(null);
       } else {
-        const errorData = publishedResponse.ok
-          ? await draftsResponse.json().catch(() => ({}))
-          : await publishedResponse.json().catch(() => ({}));
+        const errorData = await response.json().catch(() => ({}));
         setError(errorData.message || 'Не удалось загрузить новости');
       }
     } catch (error) {
@@ -127,9 +116,31 @@ const NewsList: FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters, token, navigate]);
 
-  const handleDeleteNewsAction = async (id: number) => {
+
+
+  // fetchNews and fetchAuthors moved up
+
+  const handleSearch = useCallback((value: string) => {
+    setFilters((prev) => {
+      if (prev.search === value) return prev;
+      return { ...prev, search: value, page: 1 };
+    });
+  }, []);
+
+  const handleFilterChange = useCallback((newFilters: any) => {
+    setFilters((prev) => ({ ...prev, ...newFilters, page: 1 }));
+  }, []);
+
+  const handlePageChange = useCallback((page: number) => {
+    setFilters((prev) => {
+      if (prev.page === page) return prev;
+      return { ...prev, page };
+    });
+  }, []);
+
+  const handleDeleteNewsAction = useCallback(async (id: number) => {
     if (!confirm('Вы уверены, что хотите удалить эту новость?')) return;
 
     try {
@@ -146,11 +157,9 @@ const NewsList: FC = () => {
       });
 
       if (response.ok) {
-        // Use functional update to avoid stale closure
         setNews(prevNews => prevNews.filter(item => item.id !== id));
         alert('Новость успешно удалена');
       } else if (response.status === 401) {
-        // Handle unauthorized - token expired
         localStorage.removeItem('auth_token');
         navigate(LINKS.loginLink);
       } else {
@@ -161,9 +170,9 @@ const NewsList: FC = () => {
       console.error('Ошибка удаления новости:', error);
       alert('Произошла ошибка при удалении новости');
     }
-  };
+  }, [token, navigate]);
 
-  const handleTogglePublishStatusAction = async (id: number, currentStatus: boolean) => {
+  const handleTogglePublishStatusAction = useCallback(async (id: number, currentStatus: boolean) => {
     try {
       if (!token) {
         alert('Токен авторизации не найден');
@@ -179,15 +188,13 @@ const NewsList: FC = () => {
       });
 
       if (response.ok) {
-        // Use functional update to avoid stale closure
-        setNews(prevNews => 
-          prevNews.map(item => 
+        setNews(prevNews =>
+          prevNews.map(item =>
             item.id === id ? { ...item, is_published: !currentStatus } : item
           )
         );
         alert(`Новость ${!currentStatus ? 'опубликована' : 'снята с публикации'} успешно`);
       } else if (response.status === 401) {
-        // Handle unauthorized - token expired
         localStorage.removeItem('auth_token');
         navigate(LINKS.loginLink);
       } else {
@@ -198,17 +205,49 @@ const NewsList: FC = () => {
       console.error('Ошибка обновления статуса новости:', error);
       alert('Произошла ошибка при обновлении статуса новости');
     }
-  };
+  }, [token, navigate]);
 
-  const handleEditNewsAction = (newsItem: News) => {
-    // Navigate to upload page with news data for editing
-    navigate(LINKS.newsUploadLink, { 
-      state: { 
-        editMode: true, 
-        newsData: newsItem 
-      } 
+  const handleEditNewsAction = useCallback((newsItem: News) => {
+    navigate(LINKS.newsUploadLink, {
+      state: {
+        editMode: true,
+        newsData: newsItem
+      }
     });
-  };
+  }, [navigate]);
+
+  useEffect(() => {
+    fetchAuthors();
+  }, [fetchAuthors]);
+
+  useEffect(() => {
+    fetchNews();
+  }, [filters, token, fetchNews]);
+
+  useEffect(() => {
+    // Event listeners for actions
+    const handleEditNews = (event: CustomEvent) => {
+      handleEditNewsAction(event.detail);
+    };
+
+    const handleTogglePublishStatus = (event: CustomEvent) => {
+      handleTogglePublishStatusAction(event.detail.id, event.detail.currentStatus);
+    };
+
+    const handleDeleteNews = (event: CustomEvent) => {
+      handleDeleteNewsAction(event.detail);
+    };
+
+    window.addEventListener('editNews', handleEditNews as EventListener);
+    window.addEventListener('toggleNewsPublishStatus', handleTogglePublishStatus as EventListener);
+    window.addEventListener('deleteNews', handleDeleteNews as EventListener);
+
+    return () => {
+      window.removeEventListener('editNews', handleEditNews as EventListener);
+      window.removeEventListener('toggleNewsPublishStatus', handleTogglePublishStatus as EventListener);
+      window.removeEventListener('deleteNews', handleDeleteNews as EventListener);
+    };
+  }, [handleEditNewsAction, handleTogglePublishStatusAction, handleDeleteNewsAction]);
 
   const headerActions = (
     <HeaderActions
@@ -220,7 +259,7 @@ const NewsList: FC = () => {
   );
 
   // Custom render functions for columns
-  const renderNewsColumn = (newsItem: News) => (
+  const renderNewsColumn = useCallback((newsItem: News) => (
     <div className="flex items-center">
       <div>
         <div className="text-sm font-medium text-gray-900">
@@ -234,15 +273,15 @@ const NewsList: FC = () => {
         </div>
       </div>
     </div>
-  );
+  ), []);
 
-  const renderCategoryColumn = (newsItem: News) => (
+  const renderCategoryColumn = useCallback((newsItem: News) => (
     <div className="text-sm text-gray-900">
       {newsItem.category ? newsItem.category.name : "Без категории"}
     </div>
-  );
+  ), []);
 
-  const renderStatisticsColumn = (newsItem: News) => (
+  const renderStatisticsColumn = useCallback((newsItem: News) => (
     <div className="space-y-1">
       <div className="text-sm text-gray-900">
         👁️ {newsItem.views_count} просмотров
@@ -251,16 +290,15 @@ const NewsList: FC = () => {
         ❤️ {newsItem.likes_count} • 💬 {newsItem.comments_count}
       </div>
     </div>
-  );
+  ), []);
 
-  const renderStatusColumn = (newsItem: News) => (
+  const renderStatusColumn = useCallback((newsItem: News) => (
     <div className="space-y-1">
       <span
-        className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-          newsItem.is_published
-            ? "bg-green-100 text-green-800"
-            : "bg-gray-100 text-gray-800"
-        }`}
+        className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${newsItem.is_published
+          ? "bg-green-100 text-green-800"
+          : "bg-gray-100 text-gray-800"
+          }`}
       >
         {newsItem.is_published ? "Опубликована" : "Черновик"}
       </span>
@@ -270,15 +308,15 @@ const NewsList: FC = () => {
         </span>
       )}
     </div>
-  );
+  ), []);
 
-  const renderCreatedAtColumn = (newsItem: News) => (
+  const renderCreatedAtColumn = useCallback((newsItem: News) => (
     <div className="text-sm text-gray-500">
       {formatDate(newsItem.created_at)}
     </div>
-  );
+  ), []);
 
-  const renderActionsColumn = (newsItem: News) => (
+  const renderActionsColumn = useCallback((newsItem: News) => (
     <Actions
       onEdit={() => {
         window.dispatchEvent(new CustomEvent("editNews", { detail: newsItem }));
@@ -299,24 +337,24 @@ const NewsList: FC = () => {
       editLabel="Редактировать новость"
       deleteLabel="Удалить новость"
     />
-  );
+  ), []);
 
   // Enhanced columns with render functions
-  const enhancedColumns = newsColumns.map(column => ({
+  const enhancedColumns = useMemo(() => newsColumns.map(column => ({
     ...column,
     render: column.key === 'news' ? renderNewsColumn :
-            column.key === 'category' ? renderCategoryColumn :
-            column.key === 'statistics' ? renderStatisticsColumn :
-            column.key === 'status' ? renderStatusColumn :
+      column.key === 'category' ? renderCategoryColumn :
+        column.key === 'statistics' ? renderStatisticsColumn :
+          column.key === 'status' ? renderStatusColumn :
             column.key === 'created_at' ? renderCreatedAtColumn :
-            undefined
-  }));
+              undefined
+  })), [renderNewsColumn, renderCategoryColumn, renderStatisticsColumn, renderStatusColumn, renderCreatedAtColumn]);
 
   // Enhanced actions with render function
-  const enhancedActions = newsActions.map(action => ({
+  const enhancedActions = useMemo(() => newsActions.map(action => ({
     ...action,
     render: action.key === 'actions' ? renderActionsColumn : undefined
-  }));
+  })), [renderActionsColumn]);
 
   return (
     <DataTable
@@ -329,8 +367,13 @@ const NewsList: FC = () => {
       error={error}
       emptyMessage="Новости не найдены"
       emptyDescription="Создайте первую новость для начала работы"
-      totalCount={news.length}
       headerActions={headerActions}
+      pagination={pagination}
+      authors={authors}
+      onSearch={handleSearch}
+      onFilterChange={handleFilterChange}
+      onPageChange={handlePageChange}
+      initialSearchValue={filters.search}
     />
   );
 };

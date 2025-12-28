@@ -37,7 +37,7 @@ export const courseValidationSchema = Yup.object({
   // removed max_students and duration_hours
   requirements: Yup.string().nullable(),
   learning_outcomes: Yup.string().nullable(),
-  zoom_link: Yup.string().nullable().test('url', 'Неверный формат ссылки', function(value) {
+  zoom_link: Yup.string().nullable().test('url', 'Неверный формат ссылки', function (value) {
     if (!value || value.trim() === '') return true;
     try {
       new URL(value);
@@ -151,24 +151,26 @@ export const courseFormFields: FormField[] = [
 ];
 
 // Initial values
-export const getCourseInitialValues = (editMode: boolean, courseData: any, onMaterialsChange?: (materials: any[]) => void) => ({
-  id: editMode && courseData ? courseData.id : null,
-  editMode: editMode,
-  title: editMode && courseData ? courseData.title : '',
-  description: editMode && courseData ? courseData.description : '',
-  content: editMode && courseData ? courseData.content : '',
-  price: editMode && courseData ? courseData.price : 0,
-  type: editMode && courseData 
-    ? (Array.isArray(courseData.type) ? courseData.type : [courseData.type])
-    : ['online'],
-  category: editMode && courseData ? courseData.category?.name : '',
-  featured_image: null,
-  // removed max_students and duration_hours
-  requirements: editMode && courseData ? courseData.requirements : '',
-  learning_outcomes: editMode && courseData ? courseData.learning_outcomes : '',
-  zoom_link: editMode && courseData ? courseData.zoom_link : '',
-  is_published: editMode && courseData ? courseData.is_published : false,
-  is_featured: editMode && courseData ? courseData.is_featured : false,
-  materials: editMode && courseData ? courseData.materials || [] : [],
-  onMaterialsChange: onMaterialsChange,
-});
+export const getCourseInitialValues = (editMode: boolean, courseData: unknown, onMaterialsChange?: (materials: Material[]) => void) => {
+  const data = courseData as any; // Cast once to access properties safely
+  return {
+    id: editMode && data ? data.id : null,
+    editMode: editMode,
+    title: editMode && data ? data.title : '',
+    description: editMode && data ? data.description : '',
+    content: editMode && data ? data.content : '',
+    price: editMode && data ? data.price : 0,
+    type: editMode && data
+      ? (Array.isArray(data.type) ? data.type : [data.type])
+      : ['online'],
+    category: editMode && data ? data.category?.name : '',
+    featured_image: null,
+    requirements: editMode && data ? data.requirements : '',
+    learning_outcomes: editMode && data ? data.learning_outcomes : '',
+    zoom_link: editMode && data ? data.zoom_link : '',
+    is_published: editMode && data ? data.is_published : false,
+    is_featured: editMode && data ? data.is_featured : false,
+    materials: editMode && data ? data.materials || [] : [],
+    onMaterialsChange: onMaterialsChange,
+  };
+};

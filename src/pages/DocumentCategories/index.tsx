@@ -48,16 +48,16 @@ const DocumentCategories = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       const token = localStorage.getItem('auth_token');
       const baseUrl = ADMIN_ENDPOINTS.DOCUMENT_CATEGORIES;
-      const url = editingCategory 
+      const url = editingCategory
         ? `${baseUrl}/${editingCategory.id}`
         : baseUrl;
-      
+
       const method = editingCategory ? 'PUT' : 'POST';
-      
+
       const response = await fetch(url, {
         method,
         headers: {
@@ -234,7 +234,7 @@ const DocumentCategories = () => {
               <h3 className="text-lg font-medium text-gray-900 mb-4">
                 {editingCategory ? 'Редактировать категорию' : 'Добавить новую категорию'}
               </h3>
-              
+
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">

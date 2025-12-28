@@ -1,13 +1,13 @@
-import { type FC, useState, useEffect } from 'react';
+import { type FC, useState, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppSelector } from 'store/hooks';
 import { LINKS } from 'constants/routes';
 import { ADMIN_ENDPOINTS } from '@/constants/endpoints';
 import FormController from '@/components/shared/FormController';
-import { 
-  newsFormFields, 
-  newsValidationSchema, 
-  getNewsInitialValues 
+import {
+  newsFormFields,
+  newsValidationSchema,
+  getNewsInitialValues
 } from './config';
 import { type FormField, type SelectOption } from '@/components/shared/FormController';
 
@@ -19,23 +19,19 @@ interface Category {
 const NewsUpload: FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { token } = useAppSelector((state: any) => state.auth);
+  const { token } = useAppSelector((state) => state.auth);
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<{
     type: 'success' | 'error' | null;
     message: string;
   }>({ type: null, message: '' });
   const [categories, setCategories] = useState<Category[]>([]);
-  
+
   // Edit mode state
   const editMode = location.state?.editMode || false;
   const newsData = location.state?.newsData || null;
 
-  useEffect(() => {
-    fetchCategories();
-  }, []);
-
-  const fetchCategories = async () => {
+  const fetchCategories = useCallback(async () => {
     try {
       if (!token) {
         console.error('No auth token found');
@@ -62,7 +58,11 @@ const NewsUpload: FC = () => {
     } catch (error) {
       console.error('Ошибка загрузки категорий:', error);
     }
-  };
+  }, [token, navigate]);
+
+  useEffect(() => {
+    fetchCategories();
+  }, [fetchCategories]);
 
   const handleSubmit = async (values: any) => {
     setUploading(true);
@@ -76,7 +76,7 @@ const NewsUpload: FC = () => {
       }
 
       const formData = new FormData();
-      
+
       formData.append('title', values.title);
       if (values.description) {
         formData.append('description', values.description);
@@ -87,7 +87,7 @@ const NewsUpload: FC = () => {
       if (values.content) {
         formData.append('content', values.content);
       }
-      
+
       // Handle category - send the category name directly
       const categoryName = values.category.trim();
       if (!categoryName) {
@@ -95,19 +95,19 @@ const NewsUpload: FC = () => {
         setUploading(false);
         return;
       }
-      
+
       formData.append('category', categoryName);
       formData.append('is_published', values.is_published ? '1' : '0');
       formData.append('is_featured', values.is_featured ? '1' : '0');
-      
+
       if (values.image) {
         formData.append('image', values.image);
       }
 
-      const url = editMode 
+      const url = editMode
         ? `${ADMIN_ENDPOINTS.NEWS}/${newsData.id}`
         : ADMIN_ENDPOINTS.NEWS;
-      
+
       // Always POST; use _method for updates
       const method = 'POST';
       if (editMode) {
@@ -129,7 +129,7 @@ const NewsUpload: FC = () => {
           type: 'success',
           message: editMode ? 'Новость успешно обновлена' : 'Новость успешно создана',
         });
-        
+
         // Redirect to news list after successful upload
         setTimeout(() => {
           navigate(LINKS.newsLink);
@@ -177,8 +177,8 @@ const NewsUpload: FC = () => {
 
   const formConfig = {
     title: editMode ? 'Редактирование новости' : 'Создание новости',
-    description: editMode 
-      ? 'Измените данные новости' 
+    description: editMode
+      ? 'Измените данные новости'
       : 'Создайте новую новость',
     fields: formFields,
     submitButtonText: editMode ? 'Обновить новость' : 'Создать новость',
@@ -194,16 +194,15 @@ const NewsUpload: FC = () => {
     <div className="p-6">
       {uploadStatus.type && (
         <div
-          className={`mb-4 p-4 rounded-md ${
-            uploadStatus.type === 'success'
-              ? 'bg-green-100 text-green-800 border border-green-200'
-              : 'bg-red-100 text-red-800 border border-red-200'
-          }`}
+          className={`mb-4 p-4 rounded-md ${uploadStatus.type === 'success'
+            ? 'bg-green-100 text-green-800 border border-green-200'
+            : 'bg-red-100 text-red-800 border border-red-200'
+            }`}
         >
           {uploadStatus.message}
         </div>
       )}
-      
+
       <FormController {...formConfig} />
     </div>
   );

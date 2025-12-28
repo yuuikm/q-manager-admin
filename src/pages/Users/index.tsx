@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LINKS } from '@/constants/routes';
 import { ADMIN_ENDPOINTS } from '@/constants/endpoints';
 import DataTable from '@/components/shared/DataTable';
-import Button from '@/components/shared/Button';
 
 interface User {
   id: number;
@@ -22,12 +21,30 @@ const Users: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updatingUsers, setUpdatingUsers] = useState<Set<number>>(new Set());
+  const [pagination, setPagination] = useState<{
+    current_page: number;
+    last_page: number;
+    total: number;
+    per_page: number;
+  } | undefined>(undefined);
+  const [filters, setFilters] = useState({
+    search: "",
+    page: 1
+  });
   const navigate = useNavigate();
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
+      setLoading(true);
       const token = localStorage.getItem('auth_token');
-      const response = await fetch(ADMIN_ENDPOINTS.USERS, {
+      const url = new URL(ADMIN_ENDPOINTS.USERS);
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== "" && value !== null) {
+          url.searchParams.append(key, String(value));
+        }
+      });
+
+      const response = await fetch(url.toString(), {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json',
@@ -47,21 +64,46 @@ const Users: React.FC = () => {
 
       const data = await response.json();
       setUsers(data.data || data);
+      if (data.current_page) {
+        setPagination({
+          current_page: data.current_page,
+          last_page: data.last_page,
+          total: data.total,
+          per_page: data.per_page
+        });
+      } else {
+        setPagination(undefined);
+      }
+      setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка загрузки пользователей');
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters, navigate]);
 
   useEffect(() => {
     fetchUsers();
+  }, [fetchUsers]);
+
+  const handleSearch = useCallback((value: string) => {
+    setFilters((prev) => {
+      if (prev.search === value) return prev;
+      return { ...prev, search: value, page: 1 };
+    });
   }, []);
 
-  const handleToggleAdminStatus = async (userId: number) => {
+  const handlePageChange = useCallback((page: number) => {
+    setFilters((prev) => {
+      if (prev.page === page) return prev;
+      return { ...prev, page };
+    });
+  }, []);
+
+  const handleToggleAdminStatus = useCallback(async (userId: number) => {
     try {
       setUpdatingUsers(prev => new Set(prev).add(userId));
-      
+
       const token = localStorage.getItem('auth_token');
       const user = users.find(u => u.id === userId);
       if (!user) return;
@@ -89,9 +131,8 @@ const Users: React.FC = () => {
         throw new Error('Ошибка изменения роли пользователя');
       }
 
-      // Update local state
-      setUsers(prevUsers => 
-        prevUsers.map(u => 
+      setUsers(prevUsers =>
+        prevUsers.map(u =>
           u.id === userId ? { ...u, role: newRole } : u
         )
       );
@@ -104,9 +145,9 @@ const Users: React.FC = () => {
         return newSet;
       });
     }
-  };
+  }, [users, navigate]);
 
-  const handleDeleteUser = async (userId: number) => {
+  const handleDeleteUser = useCallback(async (userId: number) => {
     if (!confirm('Вы уверены, что хотите удалить этого пользователя?')) {
       return;
     }
@@ -132,14 +173,13 @@ const Users: React.FC = () => {
         throw new Error('Ошибка удаления пользователя');
       }
 
-      // Remove from local state
       setUsers(prevUsers => prevUsers.filter(u => u.id !== userId));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка удаления пользователя');
     }
-  };
+  }, [navigate]);
 
-  const userColumns = [
+  const userColumns = useMemo(() => [
     {
       key: 'username',
       label: 'Имя пользователя',
@@ -170,11 +210,10 @@ const Users: React.FC = () => {
       key: 'role',
       label: 'Текущая роль',
       render: (user: User) => (
-        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-          user.role === 'admin'
-            ? 'bg-green-100 text-green-800' 
-            : 'bg-blue-100 text-blue-800'
-        }`}>
+        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${user.role === 'admin'
+          ? 'bg-green-100 text-green-800'
+          : 'bg-blue-100 text-blue-800'
+          }`}>
           {user.role === 'admin' ? 'Администратор' : 'Подписчик'}
         </span>
       ),
@@ -184,9 +223,9 @@ const Users: React.FC = () => {
       label: 'Дата регистрации',
       render: (user: User) => new Date(user.created_at).toLocaleDateString('ru-RU'),
     },
-  ];
+  ], []);
 
-  const userActions = [
+  const userActions = useMemo(() => [
     {
       key: 'role-dropdown',
       label: 'Роль',
@@ -201,9 +240,8 @@ const Users: React.FC = () => {
               }
             }}
             disabled={updatingUsers.has(user.id)}
-            className={`px-3 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-              updatingUsers.has(user.id) ? 'opacity-50 cursor-not-allowed' : ''
-            }`}
+            className={`px-3 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${updatingUsers.has(user.id) ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
           >
             <option value="subscriber">Подписчик</option>
             <option value="admin">Администратор</option>
@@ -221,30 +259,9 @@ const Users: React.FC = () => {
         </div>
       ),
     },
-  ];
+  ], [handleDeleteUser, handleToggleAdminStatus, updatingUsers]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-lg text-gray-600">Загрузка пользователей...</div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="bg-red-50 border border-red-200 rounded-md p-4">
-        <div className="text-red-800">{error}</div>
-        <Button 
-          variant="secondary" 
-          onClick={fetchUsers}
-          className="mt-2"
-        >
-          Попробовать снова
-        </Button>
-      </div>
-    );
-  }
+  // No early return for loading/error to keep component mounted
 
   return (
     <div className="space-y-6">
@@ -257,6 +274,13 @@ const Users: React.FC = () => {
           actions={userActions}
           emptyMessage="Пользователи не найдены"
           emptyDescription="В системе пока нет пользователей"
+          pagination={pagination}
+          onSearch={handleSearch}
+          onPageChange={handlePageChange}
+          showFilters={false}
+          loading={loading}
+          error={error}
+          initialSearchValue={filters.search}
         />
       </div>
     </div>

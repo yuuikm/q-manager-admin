@@ -9,7 +9,7 @@ interface RouteWrapperProps {
 }
 
 const RouteWrapper: FC<RouteWrapperProps> = ({ children }) => {
-  const { isAuthenticated, user } = useAppSelector((state: any) => state.auth);
+  const { isAuthenticated, user } = useAppSelector((state) => state.auth);
 
   // If not authenticated, redirect to login
   if (!isAuthenticated || !user || user.role !== 'admin') {

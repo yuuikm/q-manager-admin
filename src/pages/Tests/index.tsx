@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAppSelector } from 'store/hooks';
 import { ADMIN_ENDPOINTS } from '@/constants/endpoints';
@@ -74,16 +74,34 @@ const testActions: TableAction[] = [
   },
 ];
 
+import { adminAPI } from '@/api/admin';
+
 const Tests = () => {
   const navigate = useNavigate();
-  const { token } = useAppSelector((state: any) => state.auth);
+  const { token } = useAppSelector((state) => state.auth);
+  const [searchParams] = useSearchParams();
   const [tests, setTests] = useState<Test[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showExcelModal, setShowExcelModal] = useState(false);
   const [editingTest, setEditingTest] = useState<Test | null>(null);
-  const [selectedCourse, setSelectedCourse] = useState<string>('');
+  const [selectedCourse] = useState<string>(searchParams.get('course') || '');
+  const [pagination, setPagination] = useState<{
+    current_page: number;
+    last_page: number;
+    total: number;
+    per_page: number;
+  } | undefined>(undefined);
+  const [authors, setAuthors] = useState<{ id: number; name: string }[]>([]);
+  const [filters, setFilters] = useState({
+    search: "",
+    start_date: "",
+    end_date: "",
+    author_id: "",
+    page: 1
+  });
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -100,92 +118,33 @@ const Tests = () => {
   const [excelFile, setExcelFile] = useState<File | null>(null);
   const [excelCourseId, setExcelCourseId] = useState<string>('');
   const [parsingExcel, setParsingExcel] = useState(false);
-  const [parsedTest, setParsedTest] = useState<any>(null);
+  const [parsedTest, setParsedTest] = useState<{
+    title: string;
+    description: string;
+    course_id?: number | string;
+    time_limit_minutes?: number;
+    passing_score?: number;
+    total_questions?: number;
+    questions: Question[];
+  } | null>(null);
   const [showExcelPreview, setShowExcelPreview] = useState(false);
   const [excelStatus, setExcelStatus] = useState<{
     type: 'success' | 'error' | null;
     message: string;
   }>({ type: null, message: '' });
 
-  const [searchParams] = useSearchParams();
+  // useSearchParams moved up
 
-  useEffect(() => {
-    fetchTests();
-    fetchCourses();
-    
-    // Check if we have a course filter from URL
-    const courseParam = searchParams.get('course');
-    if (courseParam) {
-      setSelectedCourse(courseParam);
-    }
-    
-    // Event listeners for actions
-    const handleEditTest = (event: CustomEvent) => {
-      handleEditTestAction(event.detail);
-    };
-    
-    const handleToggleTestStatus = (event: CustomEvent) => {
-      handleToggleTestStatusAction(event.detail.id, event.detail.currentStatus);
-    };
-    
-    const handleDuplicateTest = (event: CustomEvent) => {
-      handleDuplicateTestAction(event.detail);
-    };
-    
-    const handleDeleteTest = (event: CustomEvent) => {
-      handleDeleteTestAction(event.detail);
-    };
-
-    window.addEventListener('editTest', handleEditTest as EventListener);
-    window.addEventListener('toggleTestStatus', handleToggleTestStatus as EventListener);
-    window.addEventListener('duplicateTest', handleDuplicateTest as EventListener);
-    window.addEventListener('deleteTest', handleDeleteTest as EventListener);
-
-    return () => {
-      window.removeEventListener('editTest', handleEditTest as EventListener);
-      window.removeEventListener('toggleTestStatus', handleToggleTestStatus as EventListener);
-      window.removeEventListener('duplicateTest', handleDuplicateTest as EventListener);
-      window.removeEventListener('deleteTest', handleDeleteTest as EventListener);
-    };
-  }, [searchParams]);
-
-  const fetchTests = async () => {
+  const fetchAuthors = useCallback(async () => {
     try {
-      if (!token) {
-        setLoading(false);
-        return;
-      }
-
-      let url = ADMIN_ENDPOINTS.TESTS;
-      
-      // Add course filter if selected
-      if (selectedCourse) {
-        url += `?course_id=${selectedCourse}`;
-      }
-      
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setTests(data.data || data);
-      } else if (response.status === 401) {
-        // Handle unauthorized - token expired
-        localStorage.removeItem('auth_token');
-        navigate(LINKS.loginLink);
-      }
-    } catch (error) {
-      console.error('Error fetching tests:', error);
-    } finally {
-      setLoading(false);
+      const data = await adminAPI.getAdmins();
+      setAuthors(data);
+    } catch (err) {
+      console.error('Error fetching authors:', err);
     }
-  };
+  }, []);
 
-  const fetchCourses = async () => {
+  const fetchCourses = useCallback(async () => {
     try {
       if (!token) return;
 
@@ -199,19 +158,89 @@ const Tests = () => {
       if (response.ok) {
         const data = await response.json();
         setCourses(data.data || data);
+      }
+    } catch (error) {
+      console.error('Error fetching courses:', error);
+    }
+  }, [token]);
+
+  const fetchTests = useCallback(async () => {
+    try {
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      const url = new URL(ADMIN_ENDPOINTS.TESTS);
+
+      // Add current filters
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== "" && value !== null) {
+          url.searchParams.append(key, String(value));
+        }
+      });
+
+      // Add course filter if selected from URL/local state
+      if (selectedCourse) {
+        url.searchParams.append('course_id', selectedCourse);
+      }
+
+      const response = await fetch(url.toString(), {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setTests(data.data || data);
+        if (data.current_page) {
+          setPagination({
+            current_page: data.current_page,
+            last_page: data.last_page,
+            total: data.total,
+            per_page: data.per_page
+          });
+        } else {
+          setPagination(undefined);
+        }
       } else if (response.status === 401) {
         // Handle unauthorized - token expired
         localStorage.removeItem('auth_token');
         navigate(LINKS.loginLink);
       }
     } catch (error) {
-      console.error('Error fetching courses:', error);
+      console.error('Error fetching tests:', error);
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [filters, selectedCourse, token, navigate]);
+
+
+
+  const handleSearch = useCallback((value: string) => {
+    setFilters((prev) => {
+      if (prev.search === value) return prev;
+      return { ...prev, search: value, page: 1 };
+    });
+  }, []);
+
+  const handleFilterChange = useCallback((newFilters: Record<string, string | number | boolean | null | undefined>) => {
+    setFilters((prev) => ({ ...prev, ...newFilters, page: 1 }));
+  }, []);
+
+  const handlePageChange = useCallback((page: number) => {
+    setFilters((prev) => {
+      if (prev.page === page) return prev;
+      return { ...prev, page };
+    });
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (formData.questions.length === 0) {
       alert('Пожалуйста, добавьте хотя бы один вопрос к тесту.');
       return;
@@ -223,12 +252,12 @@ const Tests = () => {
         return;
       }
 
-      const url = editingTest 
+      const url = editingTest
         ? `${ADMIN_ENDPOINTS.TESTS}/${editingTest.id}`
         : ADMIN_ENDPOINTS.TESTS;
-      
+
       const method = editingTest ? 'PUT' : 'POST';
-      
+
       const response = await fetch(url, {
         method,
         headers: {
@@ -263,7 +292,7 @@ const Tests = () => {
     });
   };
 
-  const handleEditTestAction = (test: Test) => {
+  const handleEditTestAction = useCallback((test: Test) => {
     setEditingTest(test);
     setFormData({
       title: test.title,
@@ -272,14 +301,14 @@ const Tests = () => {
       time_limit_minutes: test.time_limit_minutes,
       passing_score: test.passing_score,
       max_attempts: test.max_attempts,
-      total_questions: (test as any).total_questions || null,
+      total_questions: (test as unknown as { total_questions: number }).total_questions || null,
       is_active: test.is_active,
       questions: test.questions,
     });
     setShowModal(true);
-  };
+  }, []);
 
-  const handleDeleteTestAction = async (id: number) => {
+  const handleDeleteTestAction = useCallback(async (id: number) => {
     if (!confirm('Вы уверены, что хотите удалить этот тест?')) return;
 
     try {
@@ -296,11 +325,9 @@ const Tests = () => {
       });
 
       if (response.ok) {
-        // Use functional update to avoid stale closure
         setTests(prevTests => prevTests.filter(test => test.id !== id));
         alert('Тест успешно удален');
       } else if (response.status === 401) {
-        // Handle unauthorized - token expired
         localStorage.removeItem('auth_token');
         navigate(LINKS.loginLink);
       } else {
@@ -311,9 +338,9 @@ const Tests = () => {
       console.error('Ошибка удаления теста:', error);
       alert('Произошла ошибка при удалении теста');
     }
-  };
+  }, [token, navigate]);
 
-  const handleToggleTestStatusAction = async (id: number, currentStatus: boolean) => {
+  const handleToggleTestStatusAction = useCallback(async (id: number, currentStatus: boolean) => {
     try {
       if (!token) {
         alert('Токен авторизации не найден');
@@ -330,15 +357,13 @@ const Tests = () => {
       });
 
       if (response.ok) {
-        // Use functional update to avoid stale closure
-        setTests(prevTests => 
-          prevTests.map(test => 
+        setTests(prevTests =>
+          prevTests.map(test =>
             test.id === id ? { ...test, is_active: !currentStatus } : test
           )
         );
         alert(`Тест ${!currentStatus ? 'активирован' : 'деактивирован'} успешно`);
       } else if (response.status === 401) {
-        // Handle unauthorized - token expired
         localStorage.removeItem('auth_token');
         navigate(LINKS.loginLink);
       } else {
@@ -349,9 +374,9 @@ const Tests = () => {
       console.error('Ошибка обновления статуса теста:', error);
       alert('Произошла ошибка при обновлении статуса теста');
     }
-  };
+  }, [token, navigate]);
 
-  const handleDuplicateTestAction = async (id: number) => {
+  const handleDuplicateTestAction = useCallback(async (id: number) => {
     try {
       if (!token) {
         alert('Токен авторизации не найден');
@@ -366,11 +391,9 @@ const Tests = () => {
       });
 
       if (response.ok) {
-        // Refetch tests to get the new duplicated test
         await fetchTests();
         alert('Тест успешно дублирован');
       } else if (response.status === 401) {
-        // Handle unauthorized - token expired
         localStorage.removeItem('auth_token');
         navigate(LINKS.loginLink);
       } else {
@@ -381,7 +404,47 @@ const Tests = () => {
       console.error('Error duplicating test:', error);
       alert('Произошла ошибка при дублировании теста');
     }
-  };
+  }, [token, navigate, fetchTests]);
+
+  useEffect(() => {
+    fetchAuthors();
+    fetchCourses();
+  }, [fetchAuthors, fetchCourses]);
+
+  useEffect(() => {
+    fetchTests();
+  }, [filters, selectedCourse, token, fetchTests]);
+
+  useEffect(() => {
+    // Event listeners for actions
+    const handleEditTest = (event: CustomEvent) => {
+      handleEditTestAction(event.detail);
+    };
+
+    const handleToggleTestStatus = (event: CustomEvent) => {
+      handleToggleTestStatusAction(event.detail.id, event.detail.currentStatus);
+    };
+
+    const handleDuplicateTest = (event: CustomEvent) => {
+      handleDuplicateTestAction(event.detail);
+    };
+
+    const handleDeleteTest = (event: CustomEvent) => {
+      handleDeleteTestAction(event.detail);
+    };
+
+    window.addEventListener('editTest', handleEditTest as EventListener);
+    window.addEventListener('toggleTestStatus', handleToggleTestStatus as EventListener);
+    window.addEventListener('duplicateTest', handleDuplicateTest as EventListener);
+    window.addEventListener('deleteTest', handleDeleteTest as EventListener);
+
+    return () => {
+      window.removeEventListener('editTest', handleEditTest as EventListener);
+      window.removeEventListener('toggleTestStatus', handleToggleTestStatus as EventListener);
+      window.removeEventListener('duplicateTest', handleDuplicateTest as EventListener);
+      window.removeEventListener('deleteTest', handleDeleteTest as EventListener);
+    };
+  }, [handleEditTestAction, handleToggleTestStatusAction, handleDuplicateTestAction, handleDeleteTestAction]);
 
   const openModal = () => {
     setEditingTest(null);
@@ -404,7 +467,7 @@ const Tests = () => {
     });
   };
 
-  const updateQuestion = (index: number, field: keyof Question, value: any) => {
+  const updateQuestion = <K extends keyof Question>(index: number, field: K, value: Question[K]) => {
     const updatedQuestions = [...formData.questions];
     updatedQuestions[index] = { ...updatedQuestions[index], [field]: value };
     setFormData({ ...formData, questions: updatedQuestions });
@@ -448,9 +511,9 @@ const Tests = () => {
     setExcelStatus({ type: null, message: '' });
 
     try {
-      const formData = new FormData();
-      formData.append('excel_file', excelFile);
-      formData.append('course_id', excelCourseId);
+      const data = new FormData();
+      data.append('excel_file', excelFile);
+      data.append('course_id', excelCourseId);
 
       if (!token) {
         alert('Токен авторизации не найден');
@@ -463,39 +526,39 @@ const Tests = () => {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json',
         },
-        body: formData,
+        body: data,
       });
 
       if (response.ok) {
-        const data = await response.json();
-        setParsedTest(data);
+        const responseData = await response.json();
+        setParsedTest(responseData);
         setShowExcelPreview(true);
-        setExcelStatus({ 
-          type: 'success', 
-          message: `Успешно обработано ${data.questions.length} вопросов из Excel файла` 
+        setExcelStatus({
+          type: 'success',
+          message: `Успешно обработано ${responseData.questions.length} вопросов из Excel файла`
         });
       } else if (response.status === 401) {
         localStorage.removeItem('auth_token');
         navigate(LINKS.loginLink);
       } else {
         const errorData = await response.json();
-        setExcelStatus({ 
-          type: 'error', 
-          message: errorData.message || 'Ошибка при обработке Excel файла' 
+        setExcelStatus({
+          type: 'error',
+          message: errorData.message || 'Ошибка при обработке Excel файла'
         });
       }
     } catch (error) {
       console.error('Error parsing Excel file:', error);
-      setExcelStatus({ 
-        type: 'error', 
-        message: 'Произошла ошибка при обработке Excel файла' 
+      setExcelStatus({
+        type: 'error',
+        message: 'Произошла ошибка при обработке Excel файла'
       });
     } finally {
       setParsingExcel(false);
     }
   };
 
-  const handleExcelTestSave = async (testData: any) => {
+  const handleExcelTestSave = async (testData: unknown) => {
     try {
       if (!token) {
         alert('Токен авторизации не найден');
@@ -514,11 +577,11 @@ const Tests = () => {
 
       if (response.ok) {
         const data = await response.json();
-        setExcelStatus({ 
-          type: 'success', 
-          message: `Тест "${data.title}" успешно создан с ${data.questions.length} вопросами` 
+        setExcelStatus({
+          type: 'success',
+          message: `Тест "${data.title}" успешно создан с ${data.questions.length} вопросами`
         });
-        
+
         // Close modals and refresh tests
         setShowExcelModal(false);
         setShowExcelPreview(false);
@@ -526,7 +589,7 @@ const Tests = () => {
         setExcelFile(null);
         setExcelCourseId('');
         fetchTests();
-        
+
         // Clear status after 3 seconds
         setTimeout(() => {
           setExcelStatus({ type: null, message: '' });
@@ -536,16 +599,16 @@ const Tests = () => {
         navigate(LINKS.loginLink);
       } else {
         const errorData = await response.json();
-        setExcelStatus({ 
-          type: 'error', 
-          message: errorData.message || 'Ошибка при создании теста' 
+        setExcelStatus({
+          type: 'error',
+          message: errorData.message || 'Ошибка при создании теста'
         });
       }
     } catch (error) {
       console.error('Error creating test:', error);
-      setExcelStatus({ 
-        type: 'error', 
-        message: 'Произошла ошибка при создании теста' 
+      setExcelStatus({
+        type: 'error',
+        message: 'Произошла ошибка при создании теста'
       });
     }
   };
@@ -557,15 +620,7 @@ const Tests = () => {
     setExcelStatus({ type: null, message: '' });
   };
 
-  if (loading) {
-    return (
-      <div className="admin-card">
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        </div>
-      </div>
-    );
-  }
+  // No early return for loading to keep component mounted
 
   const headerActions = (
     <div className="flex space-x-3">
@@ -578,113 +633,113 @@ const Tests = () => {
     </div>
   );
 
+
+  // Custom render functions for columns
+  const renderTestColumn = useCallback((test: Test) => (
+    <div>
+      <div className="text-sm font-medium text-gray-900 mb-1">
+        {test.title}
+      </div>
+      {test.description && (
+        <div className="text-sm text-gray-500">{test.description}</div>
+      )}
+      <div className="text-xs text-gray-400 mt-1">
+        {test.questions.length} вопросов • Создан{" "}
+        {test.author.first_name} {test.author.last_name}
+      </div>
+    </div>
+  ), []);
+
+  const renderCourseColumn = useCallback((test: Test) => (
+    <div className="text-sm text-gray-900">{test.course.title}</div>
+  ), []);
+
+  const renderSettingsColumn = useCallback((test: Test) => (
+    <div className="space-y-1">
+      <div>⏱️ {test.time_limit_minutes} мин</div>
+      <div>🎯 {test.passing_score}% проходной</div>
+      <div>🔄 {test.max_attempts} попыток</div>
+    </div>
+  ), []);
+
+  const renderStatusColumn = useCallback((test: Test) => (
+    <span
+      className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${test.is_active
+        ? "bg-green-100 text-green-800"
+        : "bg-red-100 text-red-800"
+        }`}
+    >
+      {test.is_active ? "Активен" : "Неактивен"}
+    </span>
+  ), []);
+
+  const renderActionsColumn = useCallback((test: Test) => (
+    <Actions
+      onEdit={() => {
+        window.dispatchEvent(
+          new CustomEvent("editTest", { detail: test }),
+        );
+      }}
+      onToggleStatus={() => {
+        window.dispatchEvent(
+          new CustomEvent("toggleTestStatus", {
+            detail: { id: test.id, currentStatus: test.is_active },
+          }),
+        );
+      }}
+      onDuplicate={() => {
+        window.dispatchEvent(
+          new CustomEvent("duplicateTest", { detail: test.id }),
+        );
+      }}
+      onDelete={() => {
+        window.dispatchEvent(
+          new CustomEvent("deleteTest", { detail: test.id }),
+        );
+      }}
+      isActive={test.is_active}
+      editLabel="Редактировать тест"
+      deleteLabel="Удалить тест"
+      duplicateLabel="Дублировать тест"
+      showDuplicate={true}
+    />
+  ), []);
+
+  // Enhanced columns and actions
+  const enhancedColumns = useMemo(() => testColumns.map(column => ({
+    ...column,
+    render: column.key === 'test' ? renderTestColumn :
+      column.key === 'course' ? renderCourseColumn :
+        column.key === 'settings' ? renderSettingsColumn :
+          column.key === 'status' ? renderStatusColumn :
+            undefined
+  })), [renderTestColumn, renderCourseColumn, renderSettingsColumn, renderStatusColumn]);
+
+  const enhancedActions = useMemo(() => testActions.map(action => ({
+    ...action,
+    render: action.key === 'actions' ? renderActionsColumn : undefined
+  })), [renderActionsColumn]);
+
   return (
     <>
-      {/* Custom render functions for columns */}
-      {(() => {
-          const renderTestColumn = (test: Test) => (
-            <div>
-              <div className="text-sm font-medium text-gray-900 mb-1">
-                {test.title}
-              </div>
-              {test.description && (
-                <div className="text-sm text-gray-500">{test.description}</div>
-              )}
-              <div className="text-xs text-gray-400 mt-1">
-                {test.questions.length} вопросов • Создан{" "}
-                {test.author.first_name} {test.author.last_name}
-              </div>
-            </div>
-          );
-
-          const renderCourseColumn = (test: Test) => (
-            <div className="text-sm text-gray-900">{test.course.title}</div>
-          );
-
-          const renderSettingsColumn = (test: Test) => (
-            <div className="space-y-1">
-              <div>⏱️ {test.time_limit_minutes} мин</div>
-              <div>🎯 {test.passing_score}% проходной</div>
-              <div>🔄 {test.max_attempts} попыток</div>
-            </div>
-          );
-
-          const renderStatusColumn = (test: Test) => (
-            <span
-              className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                test.is_active
-                  ? "bg-green-100 text-green-800"
-                  : "bg-red-100 text-red-800"
-              }`}
-            >
-              {test.is_active ? "Активен" : "Неактивен"}
-            </span>
-          );
-
-          const renderActionsColumn = (test: Test) => (
-            <Actions
-              onEdit={() => {
-                window.dispatchEvent(
-                  new CustomEvent("editTest", { detail: test }),
-                );
-              }}
-              onToggleStatus={() => {
-                window.dispatchEvent(
-                  new CustomEvent("toggleTestStatus", {
-                    detail: { id: test.id, currentStatus: test.is_active },
-                  }),
-                );
-              }}
-              onDuplicate={() => {
-                window.dispatchEvent(
-                  new CustomEvent("duplicateTest", { detail: test.id }),
-                );
-              }}
-              onDelete={() => {
-                window.dispatchEvent(
-                  new CustomEvent("deleteTest", { detail: test.id }),
-                );
-              }}
-              isActive={test.is_active}
-              editLabel="Редактировать тест"
-              deleteLabel="Удалить тест"
-              duplicateLabel="Дублировать тест"
-              showDuplicate={true}
-            />
-          );
-
-          // Enhanced columns with render functions
-          const enhancedColumns = testColumns.map(column => ({
-            ...column,
-            render: column.key === 'test' ? renderTestColumn :
-                    column.key === 'course' ? renderCourseColumn :
-                    column.key === 'settings' ? renderSettingsColumn :
-                    column.key === 'status' ? renderStatusColumn :
-                    undefined
-          }));
-
-          // Enhanced actions with render function
-          const enhancedActions = testActions.map(action => ({
-            ...action,
-            render: action.key === 'actions' ? renderActionsColumn : undefined
-          }));
-
-          return (
-            <DataTable
-              title="Управление тестами"
-              description="Список всех созданных тестов"
-              data={tests}
-              columns={enhancedColumns}
-              actions={enhancedActions}
-              loading={loading}
-              error={null}
-              emptyMessage="Тесты не найдены"
-              emptyDescription="Создайте первый тест для начала работы"
-              totalCount={tests.length}
-              headerActions={headerActions}
-            />
-          );
-        })()}
+      <DataTable
+        title="Управление тестами"
+        description="Список всех созданных тестов"
+        data={tests}
+        columns={enhancedColumns}
+        actions={enhancedActions}
+        loading={loading}
+        error={null}
+        emptyMessage="Тесты не найдены"
+        emptyDescription="Создайте первый тест для начала работы"
+        headerActions={headerActions}
+        pagination={pagination}
+        authors={authors}
+        onSearch={handleSearch}
+        onFilterChange={handleFilterChange}
+        onPageChange={handlePageChange}
+        initialSearchValue={filters.search}
+      />
 
       {/* Modal */}
       {showModal && (
@@ -694,7 +749,7 @@ const Tests = () => {
               <h3 className="text-lg font-medium text-gray-900 mb-4">
                 {editingTest ? 'Редактировать тест' : 'Создать новый тест'}
               </h3>
-              
+
               <form onSubmit={handleSubmit} className="space-y-6">
                 {/* Basic Test Information */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -812,7 +867,7 @@ const Tests = () => {
                     />
                     {formData.questions.length > 0 && (
                       <p className="text-xs text-gray-500 mt-1">
-                        {formData.total_questions 
+                        {formData.total_questions
                           ? `Студенты получат случайные ${formData.total_questions} вопросов из ${formData.questions.length} загруженных`
                           : `Все ${formData.questions.length} вопросов будут использованы`}
                       </p>
@@ -869,7 +924,7 @@ const Tests = () => {
                               <select
                                 required
                                 value={question.type}
-                                onChange={(e) => updateQuestion(questionIndex, 'type', e.target.value)}
+                                onChange={(e) => updateQuestion(questionIndex, 'type', e.target.value as Question['type'])}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                               >
                                 <option value="single_choice">Один вариант</option>
@@ -1049,14 +1104,13 @@ const Tests = () => {
               <h3 className="text-lg font-medium text-gray-900 mb-4">
                 Загрузить тест из Excel
               </h3>
-              
+
               {excelStatus.type && (
                 <div
-                  className={`mb-4 p-4 rounded-md ${
-                    excelStatus.type === 'success'
-                      ? 'bg-green-100 text-green-800 border border-green-200'
-                      : 'bg-red-100 text-red-800 border border-red-200'
-                  }`}
+                  className={`mb-4 p-4 rounded-md ${excelStatus.type === 'success'
+                    ? 'bg-green-100 text-green-800 border border-green-200'
+                    : 'bg-red-100 text-red-800 border border-red-200'
+                    }`}
                 >
                   {excelStatus.message}
                 </div>
@@ -1126,7 +1180,7 @@ const Tests = () => {
               <h3 className="text-lg font-medium text-gray-900 mb-4">
                 Предварительный просмотр теста - проверьте перед сохранением
               </h3>
-              
+
               <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
@@ -1134,7 +1188,7 @@ const Tests = () => {
                     <input
                       type="text"
                       value={parsedTest.title}
-                      onChange={(e) => setParsedTest({...parsedTest, title: e.target.value})}
+                      onChange={(e) => setParsedTest({ ...parsedTest, title: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
@@ -1142,7 +1196,7 @@ const Tests = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Курс</label>
                     <select
                       value={parsedTest.course_id}
-                      onChange={(e) => setParsedTest({...parsedTest, course_id: Number(e.target.value)})}
+                      onChange={(e) => setParsedTest({ ...parsedTest, course_id: Number(e.target.value) })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       {courses.map(course => (
@@ -1155,7 +1209,7 @@ const Tests = () => {
                     <input
                       type="number"
                       value={parsedTest.time_limit_minutes}
-                      onChange={(e) => setParsedTest({...parsedTest, time_limit_minutes: Number(e.target.value)})}
+                      onChange={(e) => setParsedTest({ ...parsedTest, time_limit_minutes: Number(e.target.value) })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
@@ -1164,7 +1218,7 @@ const Tests = () => {
                     <input
                       type="number"
                       value={parsedTest.passing_score}
-                      onChange={(e) => setParsedTest({...parsedTest, passing_score: Number(e.target.value)})}
+                      onChange={(e) => setParsedTest({ ...parsedTest, passing_score: Number(e.target.value) })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
@@ -1181,7 +1235,7 @@ const Tests = () => {
                         const value = Number(e.target.value);
                         const maxValue = parsedTest.questions.length;
                         setParsedTest({
-                          ...parsedTest, 
+                          ...parsedTest,
                           total_questions: value > maxValue ? maxValue : (value < 1 ? 1 : value)
                         });
                       }}
@@ -1197,7 +1251,7 @@ const Tests = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Описание</label>
                   <textarea
                     value={parsedTest.description || ''}
-                    onChange={(e) => setParsedTest({...parsedTest, description: e.target.value})}
+                    onChange={(e) => setParsedTest({ ...parsedTest, description: e.target.value })}
                     rows={3}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
@@ -1206,21 +1260,20 @@ const Tests = () => {
                 <div>
                   <h4 className="text-lg font-semibold text-gray-900 mb-4">Вопросы ({parsedTest.questions.length})</h4>
                   <div className="space-y-4 max-h-96 overflow-y-auto">
-                    {parsedTest.questions.map((question: any, index: number) => (
+                    {parsedTest.questions.map((question: Question, index: number) => (
                       <div key={index} className="border border-gray-200 rounded-lg p-4">
                         <div className="mb-2">
                           <span className="text-sm font-medium text-gray-500">Вопрос {index + 1}:</span>
                           <p className="text-gray-900">{question.question}</p>
                         </div>
-                        
+
                         {question.options && question.options.length > 0 && (
                           <div className="mb-2">
                             <span className="text-sm font-medium text-gray-500 block mb-2">Варианты ответов (выберите правильный):</span>
                             <div className="space-y-1">
                               {question.options.map((option: string, optIndex: number) => (
-                                <label key={optIndex} className={`flex items-center space-x-2 p-2 rounded cursor-pointer hover:bg-gray-50 ${
-                                  option === question.correct_answer ? 'bg-green-50 border border-green-200' : 'border border-gray-200'
-                                }`}>
+                                <label key={optIndex} className={`flex items-center space-x-2 p-2 rounded cursor-pointer hover:bg-gray-50 ${option === question.correct_answer ? 'bg-green-50 border border-green-200' : 'border border-gray-200'
+                                  }`}>
                                   <input
                                     type="checkbox"
                                     checked={option === question.correct_answer}
@@ -1228,14 +1281,13 @@ const Tests = () => {
                                       if (e.target.checked) {
                                         const updatedQuestions = [...parsedTest.questions];
                                         updatedQuestions[index].correct_answer = option;
-                                        setParsedTest({...parsedTest, questions: updatedQuestions});
+                                        setParsedTest({ ...parsedTest, questions: updatedQuestions });
                                       }
                                     }}
                                     className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
                                   />
-                                  <span className={`text-sm flex-1 ${
-                                    option === question.correct_answer ? 'text-green-600 font-semibold' : 'text-gray-700'
-                                  }`}>
+                                  <span className={`text-sm flex-1 ${option === question.correct_answer ? 'text-green-600 font-semibold' : 'text-gray-700'
+                                    }`}>
                                     {option}
                                     {option === question.correct_answer && ' ✓'}
                                   </span>
@@ -1244,7 +1296,7 @@ const Tests = () => {
                             </div>
                           </div>
                         )}
-                        
+
                         <div className="text-xs text-gray-500 mt-2">
                           Тип: {question.type} | Баллы: {question.points}
                         </div>

@@ -1,4 +1,4 @@
-import { type FC, useState, useEffect } from 'react';
+import { type FC, useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppSelector } from 'store/hooks';
 import { ADMIN_ENDPOINTS } from 'constants/endpoints';
@@ -14,41 +14,39 @@ import {
   type InternalDocument,
 } from './config';
 
+import { adminAPI } from '@/api/admin';
+
 const InternalDocumentList: FC = () => {
   const navigate = useNavigate();
-  const { token } = useAppSelector((state: any) => state.auth);
+  const { token } = useAppSelector((state) => state.auth);
   const [documents, setDocuments] = useState<InternalDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pagination, setPagination] = useState<{
+    current_page: number;
+    last_page: number;
+    total: number;
+    per_page: number;
+  } | undefined>(undefined);
+  const [authors, setAuthors] = useState<{ id: number; name: string }[]>([]);
+  const [filters, setFilters] = useState({
+    search: "",
+    start_date: "",
+    end_date: "",
+    author_id: "",
+    page: 1
+  });
 
-  useEffect(() => {
-    fetchDocuments();
-    
-    // Event listeners for actions
-    const handleEditDocument = (event: CustomEvent) => {
-      handleEditDocumentAction(event.detail);
-    };
-    
-    const handleViewDocument = (event: CustomEvent) => {
-      handleViewDocumentAction(event.detail.id);
-    };
-    
-    const handleDeleteDocument = (event: CustomEvent) => {
-      handleDeleteDocumentAction(event.detail);
-    };
-
-    window.addEventListener('editInternalDocument', handleEditDocument as EventListener);
-    window.addEventListener('viewInternalDocument', handleViewDocument as EventListener);
-    window.addEventListener('deleteInternalDocument', handleDeleteDocument as EventListener);
-
-    return () => {
-      window.removeEventListener('editInternalDocument', handleEditDocument as EventListener);
-      window.removeEventListener('viewInternalDocument', handleViewDocument as EventListener);
-      window.removeEventListener('deleteInternalDocument', handleDeleteDocument as EventListener);
-    };
+  const fetchAuthors = useCallback(async () => {
+    try {
+      const data = await adminAPI.getAdmins();
+      setAuthors(data);
+    } catch (err) {
+      console.error('Error fetching authors:', err);
+    }
   }, []);
 
-  const fetchDocuments = async () => {
+  const fetchDocuments = useCallback(async () => {
     try {
       if (!token) {
         setError('Токен авторизации не найден');
@@ -56,7 +54,15 @@ const InternalDocumentList: FC = () => {
         return;
       }
 
-      const response = await fetch(ADMIN_ENDPOINTS.INTERNAL_DOCUMENTS, {
+      setLoading(true);
+      const url = new URL(ADMIN_ENDPOINTS.INTERNAL_DOCUMENTS);
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== "" && value !== null) {
+          url.searchParams.append(key, String(value));
+        }
+      });
+
+      const response = await fetch(url.toString(), {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -65,8 +71,17 @@ const InternalDocumentList: FC = () => {
 
       if (response.ok) {
         const data = await response.json();
-        // Handle both paginated and non-paginated responses
         setDocuments(data.data || data || []);
+        if (data.current_page) {
+          setPagination({
+            current_page: data.current_page,
+            last_page: data.last_page,
+            total: data.total,
+            per_page: data.per_page
+          });
+        } else {
+          setPagination(undefined);
+        }
         setError(null);
       } else if (response.status === 401) {
         localStorage.removeItem('auth_token');
@@ -81,9 +96,37 @@ const InternalDocumentList: FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters, token, navigate]);
 
-  const handleDeleteDocumentAction = async (id: number) => {
+  useEffect(() => {
+    fetchAuthors();
+  }, [fetchAuthors]);
+
+  useEffect(() => {
+    fetchDocuments();
+  }, [fetchDocuments]);
+
+  // fetch* moved up
+
+  const handleSearch = useCallback((value: string) => {
+    setFilters((prev) => {
+      if (prev.search === value) return prev;
+      return { ...prev, search: value, page: 1 };
+    });
+  }, []);
+
+  const handleFilterChange = useCallback((newFilters: Record<string, string | number | boolean | null | undefined>) => {
+    setFilters((prev) => ({ ...prev, ...newFilters, page: 1 }));
+  }, []);
+
+  const handlePageChange = useCallback((page: number) => {
+    setFilters((prev) => {
+      if (prev.page === page) return prev;
+      return { ...prev, page };
+    });
+  }, []);
+
+  const handleDeleteDocumentAction = useCallback(async (id: number) => {
     if (!confirm('Вы уверены, что хотите удалить этот документ?')) {
       return;
     }
@@ -116,20 +159,45 @@ const InternalDocumentList: FC = () => {
       console.error('Ошибка удаления документа:', error);
       alert('Произошла ошибка при удалении документа');
     }
-  };
+  }, [token, navigate]);
 
-  const handleEditDocumentAction = (document: InternalDocument) => {
-    navigate(LINKS.internalDocumentsUploadLink, { 
-      state: { 
-        editMode: true, 
-        documentData: document 
-      } 
+  const handleEditDocumentAction = useCallback((document: InternalDocument) => {
+    navigate(LINKS.internalDocumentsUploadLink, {
+      state: {
+        editMode: true,
+        documentData: document
+      }
     });
-  };
+  }, [navigate]);
 
-  const handleViewDocumentAction = (id: number) => {
+  const handleViewDocumentAction = useCallback((id: number) => {
     navigate(LINKS.internalDocumentsViewLink.replace(':id', id.toString()));
-  };
+  }, [navigate]);
+
+  useEffect(() => {
+    // Event listeners for actions
+    const handleEditDocument = (event: CustomEvent) => {
+      handleEditDocumentAction(event.detail);
+    };
+
+    const handleViewDocument = (event: CustomEvent) => {
+      handleViewDocumentAction(event.detail.id);
+    };
+
+    const handleDeleteDocument = (event: CustomEvent) => {
+      handleDeleteDocumentAction(event.detail);
+    };
+
+    window.addEventListener('editInternalDocument', handleEditDocument as EventListener);
+    window.addEventListener('viewInternalDocument', handleViewDocument as EventListener);
+    window.addEventListener('deleteInternalDocument', handleDeleteDocument as EventListener);
+
+    return () => {
+      window.removeEventListener('editInternalDocument', handleEditDocument as EventListener);
+      window.removeEventListener('viewInternalDocument', handleViewDocument as EventListener);
+      window.removeEventListener('deleteInternalDocument', handleDeleteDocument as EventListener);
+    };
+  }, [handleEditDocumentAction, handleViewDocumentAction, handleDeleteDocumentAction]);
 
   const headerActions = (
     <HeaderActions
@@ -138,35 +206,35 @@ const InternalDocumentList: FC = () => {
     />
   );
 
-  const renderDocumentColumn = (document: InternalDocument) => (
+  const renderDocumentColumn = useCallback((document: InternalDocument) => (
     <div>
       <div className="text-sm font-medium text-gray-900 mb-1">
         {document.title}
       </div>
     </div>
-  );
+  ), []);
 
-  const renderFileInfoColumn = (document: InternalDocument) => (
+  const renderFileInfoColumn = useCallback((document: InternalDocument) => (
     <div className="text-sm text-gray-900">
       <div className="mb-1">📁 {document.file_name}</div>
       <div className="text-xs text-gray-500">{formatFileSize(document.file_size)}</div>
       <div className="text-xs text-gray-500">{document.file_type}</div>
     </div>
-  );
+  ), []);
 
-  const renderAuthorColumn = (document: InternalDocument) => (
+  const renderAuthorColumn = useCallback((document: InternalDocument) => (
     <div className="text-sm text-gray-900">
       {document.author?.username || 'Неизвестно'}
     </div>
-  );
+  ), []);
 
-  const renderCreatedAtColumn = (document: InternalDocument) => (
-      <div className="text-sm text-gray-500">
-        {formatDate(document.created_at)}
+  const renderCreatedAtColumn = useCallback((document: InternalDocument) => (
+    <div className="text-sm text-gray-500">
+      {formatDate(document.created_at)}
     </div>
-  );
+  ), []);
 
-  const renderActionsColumn = (document: InternalDocument) => (
+  const renderActionsColumn = useCallback((document: InternalDocument) => (
     <Actions
       onEdit={() => {
         window.dispatchEvent(
@@ -189,21 +257,21 @@ const InternalDocumentList: FC = () => {
       showToggle={false}
       showView={true}
     />
-  );
+  ), []);
 
-  const enhancedColumns = internalDocumentColumns.map(column => ({
+  const enhancedColumns = useMemo(() => internalDocumentColumns.map(column => ({
     ...column,
     render: column.key === 'document' ? renderDocumentColumn :
-            column.key === 'file_info' ? renderFileInfoColumn :
-            column.key === 'author' ? renderAuthorColumn :
-            column.key === 'created_at' ? renderCreatedAtColumn :
+      column.key === 'file_info' ? renderFileInfoColumn :
+        column.key === 'author' ? renderAuthorColumn :
+          column.key === 'created_at' ? renderCreatedAtColumn :
             undefined
-  }));
+  })), [renderDocumentColumn, renderFileInfoColumn, renderAuthorColumn, renderCreatedAtColumn]);
 
-  const enhancedActions = internalDocumentActions.map(action => ({
+  const enhancedActions = useMemo(() => internalDocumentActions.map(action => ({
     ...action,
     render: action.key === 'actions' ? renderActionsColumn : undefined
-  }));
+  })), [renderActionsColumn]);
 
   return (
     <DataTable
@@ -216,8 +284,13 @@ const InternalDocumentList: FC = () => {
       error={error}
       emptyMessage="Документы не найдены"
       emptyDescription="Загрузите первый документ для начала работы"
-      totalCount={documents.length}
       headerActions={headerActions}
+      pagination={pagination}
+      authors={authors}
+      onSearch={handleSearch}
+      onFilterChange={handleFilterChange}
+      onPageChange={handlePageChange}
+      initialSearchValue={filters.search}
     />
   );
 };

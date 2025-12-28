@@ -1,16 +1,17 @@
-import { type FC, useState, useEffect } from 'react';
+import { type FC, useState, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppSelector } from 'store/hooks';
 import { LINKS } from 'constants/routes';
 import { ADMIN_ENDPOINTS } from '@/constants/endpoints';
 import FormController from '@/components/shared/FormController';
 import MaterialsManager from '@/components/shared/MaterialsManager';
-import { 
-  courseFormFields, 
-  courseValidationSchema, 
-  getCourseInitialValues 
+import {
+  courseFormFields,
+  courseValidationSchema,
+  getCourseInitialValues
 } from './config';
 import { type FormField, type SelectOption } from '@/components/shared/FormController';
+import { type Material } from '@/components/shared/MaterialsManager';
 
 interface Category {
   id: number;
@@ -20,41 +21,31 @@ interface Category {
 const CourseUpload: FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { token } = useAppSelector((state: any) => state.auth);
+  const { token } = useAppSelector((state) => state.auth);
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<{
     type: 'success' | 'error' | null;
     message: string;
   }>({ type: null, message: '' });
   const [categories, setCategories] = useState<Category[]>([]);
-  const [materials, setMaterials] = useState<any[]>([]);
+  const [materials, setMaterials] = useState<Material[]>([]);
   const typeOptions = [
     { value: 'online', label: 'Онлайн' },
     { value: 'offline', label: 'Оффлайн' },
     { value: 'self_learning', label: 'Дистанционное обучение' },
   ];
-  
+
   // Handle materials change from MaterialsManager
-  const handleMaterialsChange = (newMaterials: any[]) => {
+  const handleMaterialsChange = (newMaterials: Material[]) => {
     console.log('CourseUpload: handleMaterialsChange called with:', newMaterials);
     setMaterials(newMaterials);
   };
-  
+
   // Edit mode state
   const editMode = location.state?.editMode || false;
   const courseData = location.state?.courseData || null;
 
-  useEffect(() => {
-    fetchCategories();
-  }, []);
-
-  // Debug materials state changes
-  useEffect(() => {
-    console.log('CourseUpload: materials state changed to:', materials);
-  }, [materials]);
-
-
-  const fetchCategories = async () => {
+  const fetchCategories = useCallback(async () => {
     try {
       if (!token) {
         console.error('No auth token found');
@@ -81,12 +72,25 @@ const CourseUpload: FC = () => {
     } catch (error) {
       console.error('Ошибка загрузки категорий:', error);
     }
-  };
+  }, [token, navigate]);
 
-  const handleSubmit = async (values: any) => {
+  useEffect(() => {
+    fetchCategories();
+  }, [fetchCategories]);
+
+  // Debug materials state changes
+  useEffect(() => {
+    console.log('CourseUpload: materials state changed to:', materials);
+  }, [materials]);
+
+
+
+  const handleSubmit = async (values: any) => { // Keep values: any for Formik compatibility
+    // Formik handles e.preventDefault() internally, so no need to add it here.
+    // If you need to access the event, you would typically do it in a lower-level handler.
     setUploading(true);
     setUploadStatus({ type: null, message: '' });
-    
+
     try {
       if (!token) {
         console.error('No auth token found');
@@ -97,7 +101,7 @@ const CourseUpload: FC = () => {
       console.log('Submitting course with token:', token.substring(0, 20) + '...');
       console.log('Form values:', values);
       const formData = new FormData();
-      
+
       formData.append('title', values.title);
       formData.append('description', values.description);
       formData.append('content', values.content);
@@ -124,24 +128,24 @@ const CourseUpload: FC = () => {
       // Laravel boolean validator accepts 1/0 or true/false; with FormData prefer 1/0
       formData.append('is_published', values.is_published ? '1' : '0');
       formData.append('is_featured', values.is_featured ? '1' : '0');
-      
+
       if (values.featured_image) {
         formData.append('featured_image', values.featured_image);
       }
 
       // Debug FormData contents
       console.log('FormData contents:');
-      for (let [key, value] of formData.entries()) {
+      for (const [key, value] of formData.entries()) {
         console.log(`${key}:`, value);
       }
 
-      const url = editMode 
+      const url = editMode
         ? `${ADMIN_ENDPOINTS.COURSES}/${courseData.id}`
         : ADMIN_ENDPOINTS.COURSES;
-      
+
       // Use POST for both create and update, with _method field for updates
       const method = 'POST';
-      
+
       if (editMode) {
         formData.append('_method', 'PUT');
       }
@@ -159,7 +163,7 @@ const CourseUpload: FC = () => {
       if (response.ok) {
         const result = await response.json();
         console.log('Course creation response:', result);
-        
+
         // Save materials if this is a new course
         console.log('Edit mode:', editMode, 'Materials length:', materials.length);
         if (!editMode && materials.length > 0) {
@@ -167,7 +171,7 @@ const CourseUpload: FC = () => {
           const courseId = result.course?.id || result.id || result.data?.id;
           console.log('Using course ID:', courseId);
           console.log('About to save materials:', materials);
-          
+
           if (courseId) {
             await saveMaterials(courseId);
           } else {
@@ -177,11 +181,11 @@ const CourseUpload: FC = () => {
           console.log('Skipping materials save - editMode:', editMode, 'materials.length:', materials.length);
         }
 
-        setUploadStatus({ 
-          type: 'success', 
+        setUploadStatus({
+          type: 'success',
           message: editMode ? 'Курс успешно обновлен' : 'Курс успешно создан',
         });
-        
+
         // Redirect to courses list after successful upload
         setTimeout(() => {
           navigate(LINKS.coursesLink);
@@ -193,24 +197,24 @@ const CourseUpload: FC = () => {
       } else {
         console.error('Course creation failed:', response.status, response.statusText);
         let errorMessage = 'Ошибка при создании курса';
-        
+
         try {
           const errorData = await response.json();
           errorMessage = errorData.message || errorData.error || errorMessage;
-        } catch (e) {
+        } catch {
           // If response is not JSON, use status text
           errorMessage = `Ошибка ${response.status}: ${response.statusText}`;
         }
-        
-        setUploadStatus({ 
-          type: 'error', 
+
+        setUploadStatus({
+          type: 'error',
           message: errorMessage
         });
       }
     } catch (error) {
       console.error('Ошибка создания курса:', error);
-      setUploadStatus({ 
-        type: 'error', 
+      setUploadStatus({
+        type: 'error',
         message: 'Произошла ошибка при создании курса',
       });
     } finally {
@@ -226,7 +230,7 @@ const CourseUpload: FC = () => {
   const saveMaterials = async (courseId: number) => {
     console.log('Saving materials for course ID:', courseId);
     console.log('Materials to save:', materials);
-    
+
     if (materials.length === 0) {
       console.log('No materials to save');
       return;
@@ -236,17 +240,17 @@ const CourseUpload: FC = () => {
       console.error('No auth token found for materials');
       return;
     }
-    
+
     for (const material of materials) {
       console.log('Processing material:', material);
-      
+
       // Skip materials that already have a real ID (from edit mode)
       // Real IDs are small numbers, temporary IDs are large timestamps
       if (material.id && material.id < 1000000000000) {
         console.log('Skipping material with real ID:', material.id);
         continue; // Skip materials that already exist in database
       }
-      
+
       try {
         const formData = new FormData();
         formData.append('title', material.title);
@@ -256,26 +260,26 @@ const CourseUpload: FC = () => {
         formData.append('sort_order', material.sort_order.toString());
         formData.append('is_required', material.is_required.toString());
         formData.append('is_active', material.is_active.toString());
-        
+
         if (material.external_url) {
           formData.append('external_url', material.external_url);
         }
-        
+
         if (material.content) {
           formData.append('content', material.content);
         }
-        
+
         if (material.duration_minutes) {
           formData.append('duration_minutes', material.duration_minutes.toString());
         }
-        
+
         if (material.file) {
           formData.append('file', material.file);
         }
 
         // Debug FormData contents
         console.log('Material FormData contents:');
-        for (let [key, value] of formData.entries()) {
+        for (const [key, value] of formData.entries()) {
           console.log(`${key}:`, value);
         }
 
@@ -345,11 +349,10 @@ const CourseUpload: FC = () => {
                 return (
                   <label
                     key={option.value}
-                    className={`flex items-center space-x-2 rounded-md border border-gray-200 px-3 py-2 transition ${
-                      isDisabled
-                        ? 'cursor-not-allowed opacity-60'
-                        : 'cursor-pointer hover:border-blue-400'
-                    }`}
+                    className={`flex items-center space-x-2 rounded-md border border-gray-200 px-3 py-2 transition ${isDisabled
+                      ? 'cursor-not-allowed opacity-60'
+                      : 'cursor-pointer hover:border-blue-400'
+                      }`}
                   >
                     <input
                       type="checkbox"
@@ -371,7 +374,7 @@ const CourseUpload: FC = () => {
       };
     }
 
-     if (field.name === 'category') {
+    if (field.name === 'category') {
       return {
         ...field,
         options: categoryOptions,
@@ -381,11 +384,11 @@ const CourseUpload: FC = () => {
       return {
         ...field,
         customRender: (_field: FormField, formik: any) => {
-          return <MaterialsManager 
-            form={formik} 
-            courseId={formik.values.editMode ? formik.values.id : null} 
+          return <MaterialsManager
+            form={formik}
+            courseId={formik.values.editMode ? formik.values.id : null}
             editMode={formik.values.editMode}
-            onMaterialsChange={formik.values.onMaterialsChange}
+            onMaterialsChange={handleMaterialsChange}
           />;
         },
       };
@@ -395,8 +398,8 @@ const CourseUpload: FC = () => {
 
   const formConfig = {
     title: editMode ? 'Редактирование курса' : 'Создание курса',
-    description: editMode 
-      ? 'Измените данные курса' 
+    description: editMode
+      ? 'Измените данные курса'
       : 'Создайте новый курс',
     fields: formFields,
     submitButtonText: editMode ? 'Обновить курс' : 'Создать курс',
@@ -413,16 +416,15 @@ const CourseUpload: FC = () => {
     <div className="p-6">
       {uploadStatus.type && (
         <div
-          className={`mb-4 p-4 rounded-md ${
-          uploadStatus.type === 'success' 
-              ? 'bg-green-100 text-green-800 border border-green-200'
-              : 'bg-red-100 text-red-800 border border-red-200'
-          }`}
+          className={`mb-4 p-4 rounded-md ${uploadStatus.type === 'success'
+            ? 'bg-green-100 text-green-800 border border-green-200'
+            : 'bg-red-100 text-red-800 border border-red-200'
+            }`}
         >
           {uploadStatus.message}
         </div>
       )}
-      
+
       <FormController {...formConfig} />
     </div>
   );

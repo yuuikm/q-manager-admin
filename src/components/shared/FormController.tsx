@@ -1,20 +1,20 @@
-import React, { type FC, useState, useEffect } from 'react';
-import { Formik, Form, Field, ErrorMessage, type FormikProps } from 'formik';
+import React, { useState, useEffect } from 'react';
+import { Formik, Form, Field, ErrorMessage, type FormikProps, type FormikHelpers } from 'formik';
 import * as Yup from 'yup';
 
 // Form field types
-export type FieldType = 
-  | 'text' 
-  | 'textarea' 
-  | 'number' 
-  | 'email' 
-  | 'password' 
-  | 'select' 
-  | 'checkbox' 
-  | 'radio' 
-  | 'file' 
-  | 'date' 
-  | 'time' 
+export type FieldType =
+  | 'text'
+  | 'textarea'
+  | 'number'
+  | 'email'
+  | 'password'
+  | 'select'
+  | 'checkbox'
+  | 'radio'
+  | 'file'
+  | 'date'
+  | 'time'
   | 'datetime-local'
   | 'searchable-select'
   | 'custom';
@@ -26,7 +26,7 @@ export interface SelectOption {
 }
 
 // Form field configuration
-export interface FormField {
+export interface FormField<V = Record<string, unknown>> {
   name: string;
   type: FieldType;
   label: string;
@@ -41,53 +41,53 @@ export interface FormField {
   multiple?: boolean; // for file/select fields
   disabled?: boolean;
   className?: string;
-  customRender?: (field: FormField, formik: FormikProps<any>) => React.ReactNode;
-  validation?: Yup.Schema<any>;
+  customRender?: (field: FormField<V>, formik: FormikProps<V>) => React.ReactNode;
+  validation?: Yup.AnySchema;
   conditional?: {
     field: string;
-    value: any;
+    value: string | number | boolean | null | undefined;
   };
 }
 
 // Form configuration
-export interface FormConfig {
+export interface FormConfig<V extends Record<string, any>> {
   title: string;
   description?: string;
-  fields: FormField[];
+  fields: FormField<V>[];
   submitButtonText: string;
   cancelButtonText?: string;
-  onSubmit: (values: any, formikHelpers: any) => Promise<void>;
+  onSubmit: (values: V, formikHelpers: FormikHelpers<V>) => void | Promise<unknown>;
   onCancel?: () => void;
-  initialValues: any;
-  validationSchema: Yup.ObjectSchema<any>;
+  initialValues: V;
+  validationSchema: Yup.AnyObjectSchema;
   loading?: boolean;
   className?: string;
 }
 
 // Searchable select component
-interface SearchableSelectProps {
-  field: FormField;
-  formik: FormikProps<any>;
+interface SearchableSelectProps<V extends Record<string, any>> {
+  field: FormField<V>;
+  formik: FormikProps<V>;
   options: SelectOption[];
   onSearch: (value: string) => void;
   showDropdown: boolean;
   onToggleDropdown: () => void;
 }
 
-const SearchableSelect: FC<SearchableSelectProps> = ({
+const SearchableSelect = <V extends Record<string, any>>({
   field,
   formik,
   options,
   onSearch,
   showDropdown,
   onToggleDropdown,
-}) => {
+}: SearchableSelectProps<V>) => {
   const [searchValue, setSearchValue] = useState(formik.values[field.name] || '');
 
   // Sync search value with formik value
   useEffect(() => {
     setSearchValue(formik.values[field.name] || '');
-  }, [formik.values[field.name]]);
+  }, [formik.values, field.name]);
 
   const handleSearch = (value: string) => {
     setSearchValue(value);
@@ -129,7 +129,7 @@ const SearchableSelect: FC<SearchableSelectProps> = ({
 };
 
 // Main FormController component
-const FormController: FC<FormConfig> = ({
+const FormController = <V extends Record<string, any>>({
   title,
   description,
   fields,
@@ -141,7 +141,7 @@ const FormController: FC<FormConfig> = ({
   validationSchema,
   loading = false,
   className = '',
-}) => {
+}: FormConfig<V>) => {
   const [searchableOptions, setSearchableOptions] = useState<Record<string, SelectOption[]>>({});
   const [showDropdowns, setShowDropdowns] = useState<Record<string, boolean>>({});
 
@@ -150,12 +150,12 @@ const FormController: FC<FormConfig> = ({
     const searchableFields = fields.filter(field => field.type === 'searchable-select');
     const initialOptions: Record<string, SelectOption[]> = {};
     const initialDropdowns: Record<string, boolean> = {};
-    
+
     searchableFields.forEach(field => {
       initialOptions[field.name] = field.options || [];
       initialDropdowns[field.name] = false;
     });
-    
+
     setSearchableOptions(initialOptions);
     setShowDropdowns(initialDropdowns);
   }, [fields]);
@@ -181,23 +181,23 @@ const FormController: FC<FormConfig> = ({
   };
 
   // Helper function to check if field should be shown based on conditional logic
-  const shouldShowField = (field: FormField, formik: FormikProps<any>) => {
+  const shouldShowField = (field: FormField<V>, formik: FormikProps<V>) => {
     if (!field.conditional) return true;
-    
+
     const { field: conditionalField, value: conditionalValue } = field.conditional;
     const fieldValue = formik.values[conditionalField];
-    
+
     return fieldValue === conditionalValue;
   };
 
-  const renderField = (field: FormField, formik: FormikProps<any>) => {
+  const renderField = (field: FormField<V>, formik: FormikProps<V>) => {
     if (field.customRender) {
       return field.customRender(field, formik);
     }
 
     const baseClasses = `w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${field.className || ''}`;
-    const errorClasses = formik.errors[field.name] && formik.touched[field.name] 
-      ? 'border-red-500' 
+    const errorClasses = formik.errors[field.name] && formik.touched[field.name]
+      ? 'border-red-500'
       : '';
 
     switch (field.type) {
@@ -337,18 +337,7 @@ const FormController: FC<FormConfig> = ({
         validationSchema={validationSchema}
         onSubmit={onSubmit}
       >
-        {(formik) => {
-          // Debug validation
-          useEffect(() => {
-            console.log('Form validation status:', {
-              isValid: formik.isValid,
-              errors: formik.errors,
-              values: formik.values,
-              touched: formik.touched
-            });
-          }, [formik.isValid, formik.errors, formik.values, formik.touched]);
-
-          return (
+        {(formik) => (
           <Form className="space-y-6">
             {fields.map((field) => {
               // Skip rendering if field doesn't meet conditional requirements
@@ -364,9 +353,9 @@ const FormController: FC<FormConfig> = ({
                       {field.required && <span className="text-red-500 ml-1">*</span>}
                     </label>
                   )}
-                  
+
                   {renderField(field, formik)}
-                  
+
                   <ErrorMessage
                     name={field.name}
                     component="div"
@@ -402,8 +391,7 @@ const FormController: FC<FormConfig> = ({
               </button>
             </div>
           </Form>
-          );
-        }}
+        )}
       </Formik>
     </div>
   );

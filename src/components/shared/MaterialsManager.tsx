@@ -1,9 +1,9 @@
-import { type FC, useState, useEffect } from 'react';
+import { type FC, useState, useEffect, useCallback } from 'react';
 import { type FormikProps } from 'formik';
 import { ADMIN_ENDPOINTS } from '@/constants/endpoints';
 import Button from './Button';
 
-interface Material {
+export interface Material {
   id?: number;
   title: string;
   description: string;
@@ -21,45 +21,31 @@ interface Material {
   file_size?: number;
 }
 
-interface MaterialsManagerProps {
-  form: FormikProps<any>;
+interface MaterialsManagerProps<V extends Record<string, any>> {
+  form: FormikProps<V>;
   courseId?: number;
   editMode?: boolean;
   onMaterialsChange?: (materials: Material[]) => void;
 }
 
-const MaterialsManager: FC<MaterialsManagerProps> = ({ form, courseId, editMode = false, onMaterialsChange }) => {
+const MaterialsManager = <V extends Record<string, any>>({
+  form,
+  courseId,
+  editMode = false,
+  onMaterialsChange
+}: MaterialsManagerProps<V>) => {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
 
-  useEffect(() => {
-    if (editMode && courseId) {
-      fetchMaterials();
-    }
-  }, [editMode, courseId]);
-
-  useEffect(() => {
-    console.log('MaterialsManager: materials changed:', materials);
-    if (onMaterialsChange) {
-      console.log('MaterialsManager: calling onMaterialsChange with:', materials);
-      onMaterialsChange(materials);
-    }
-    // Update the form's materials field for validation
-    if (form.setFieldValue) {
-      console.log('MaterialsManager: updating form materials field with:', materials);
-      form.setFieldValue('materials', materials);
-    }
-  }, [materials, onMaterialsChange]);
-
-  const fetchMaterials = async () => {
+  const fetchMaterials = useCallback(async () => {
     console.log('MaterialsManager: fetchMaterials called with courseId:', courseId);
     if (!courseId) {
       console.log('MaterialsManager: No courseId, skipping fetch');
       return;
     }
-    
+
     setLoading(true);
     try {
       const token = localStorage.getItem('auth_token');
@@ -77,12 +63,12 @@ const MaterialsManager: FC<MaterialsManagerProps> = ({ form, courseId, editMode 
         console.log('MaterialsManager: Fetched materials:', data);
         const uniqueById = Array.isArray(data)
           ? Object.values(
-              (data as Material[]).reduce<Record<string, Material>>((acc, item) => {
-                const key = String(item.id ?? `tmp-${item.title}-${item.sort_order}`);
-                acc[key] = item;
-                return acc;
-              }, {})
-            )
+            (data as Material[]).reduce<Record<string, Material>>((acc, item) => {
+              const key = String(item.id ?? `tmp-${item.title}-${item.sort_order}`);
+              acc[key] = item;
+              return acc;
+            }, {})
+          )
           : [];
         setMaterials(uniqueById as Material[]);
       } else {
@@ -93,7 +79,26 @@ const MaterialsManager: FC<MaterialsManagerProps> = ({ form, courseId, editMode 
     } finally {
       setLoading(false);
     }
-  };
+  }, [courseId]);
+
+  useEffect(() => {
+    if (editMode && courseId) {
+      fetchMaterials();
+    }
+  }, [editMode, courseId, fetchMaterials]);
+
+  useEffect(() => {
+    console.log('MaterialsManager: materials changed:', materials);
+    if (onMaterialsChange) {
+      console.log('MaterialsManager: calling onMaterialsChange with:', materials);
+      onMaterialsChange(materials);
+    }
+    // Update the form's materials field for validation
+    if (form.setFieldValue) {
+      console.log('MaterialsManager: updating form materials field with:', materials);
+      form.setFieldValue('materials', materials);
+    }
+  }, [materials, onMaterialsChange, form]);
 
   const addMaterial = () => {
     console.log('MaterialsManager: addMaterial called');
@@ -120,7 +125,7 @@ const MaterialsManager: FC<MaterialsManagerProps> = ({ form, courseId, editMode 
     console.log('MaterialsManager: saveMaterial called with:', materialData);
     console.log('MaterialsManager: courseId:', courseId, 'editMode:', editMode);
     console.log('MaterialsManager: courseId type:', typeof courseId, 'editMode type:', typeof editMode);
-    
+
     if (!courseId) {
       // Local-only save (new course): update existing by temp id or add new
       console.log('MaterialsManager: Saving material locally (new course)');
@@ -146,7 +151,7 @@ const MaterialsManager: FC<MaterialsManagerProps> = ({ form, courseId, editMode 
     try {
       const token = localStorage.getItem('auth_token');
       const formData = new FormData();
-      
+
       formData.append('title', materialData.title);
       formData.append('description', materialData.description);
       formData.append('course_id', courseId.toString());
@@ -154,17 +159,17 @@ const MaterialsManager: FC<MaterialsManagerProps> = ({ form, courseId, editMode 
       formData.append('sort_order', materialData.sort_order.toString());
       formData.append('is_required', materialData.is_required.toString());
       formData.append('is_active', materialData.is_active.toString());
-      
+
       if (materialData.external_url) {
         formData.append('external_url', materialData.external_url);
       }
-      
+
       if (materialData.content) {
         formData.append('content', materialData.content);
       }
-      
+
       // removed duration_minutes
-      
+
       if (materialData.file) {
         formData.append('file', materialData.file);
       }
@@ -173,7 +178,7 @@ const MaterialsManager: FC<MaterialsManagerProps> = ({ form, courseId, editMode 
       const url = hasRealId
         ? `${ADMIN_ENDPOINTS.COURSE_MATERIALS}/${materialData.id}`
         : ADMIN_ENDPOINTS.COURSE_MATERIALS;
-      
+
       // Use POST with _method override for Laravel compatibility with multipart
       const method = 'POST';
 
@@ -192,10 +197,10 @@ const MaterialsManager: FC<MaterialsManagerProps> = ({ form, courseId, editMode 
       });
 
       if (response.ok) {
-        let result: any = null;
+        let result: { material?: Material } | null = null;
         try {
           result = await response.json();
-        } catch (_) {
+        } catch {
           result = null;
         }
 
@@ -204,14 +209,22 @@ const MaterialsManager: FC<MaterialsManagerProps> = ({ form, courseId, editMode 
           setMaterials(prev => {
             const next = prev.map(m => (m.id === (updated.id ?? materialData.id) ? updated : m));
             const map: Record<string, Material> = {};
-            next.forEach(it => { map[String(it.id ?? `${it.title}-${it.sort_order}`)] = it; });
+            next.forEach(it => {
+              if (it) {
+                map[String(it.id ?? `${it.title}-${it.sort_order}`)] = it;
+              }
+            });
             return Object.values(map) as Material[];
           });
         } else if (result?.material) {
           setMaterials(prev => {
-            const next = [...prev, result.material];
+            const next = [...prev, result!.material!];
             const map: Record<string, Material> = {};
-            next.forEach(it => { map[String(it.id ?? `${it.title}-${it.sort_order}`)] = it; });
+            next.forEach(it => {
+              if (it) {
+                map[String(it.id ?? `${it.title}-${it.sort_order}`)] = it;
+              }
+            });
             return Object.values(map) as Material[];
           });
         }
@@ -393,16 +406,16 @@ const MaterialForm: FC<MaterialFormProps> = ({ material, onSave, onCancel, loadi
       e.preventDefault();
       e.stopPropagation();
     }
-    
+
     // Validate required fields
     if (!formData.title.trim()) {
       return;
     }
-    
+
     onSave(formData);
   };
 
-  const handleChange = (field: keyof Material, value: any) => {
+  const handleChange = <K extends keyof Material>(field: K, value: Material[K]) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -411,10 +424,10 @@ const MaterialForm: FC<MaterialFormProps> = ({ material, onSave, onCancel, loadi
       <h4 className="text-lg font-medium mb-4">
         {material.id ? 'Редактировать материал' : 'Добавить материал'}
       </h4>
-      
-      <div 
+
+      <div
         key={`material-form-${material.id || 'new'}`}
-        className="space-y-4" 
+        className="space-y-4"
         onClick={(e) => e.stopPropagation()}
       >
         <div>
@@ -454,7 +467,7 @@ const MaterialForm: FC<MaterialFormProps> = ({ material, onSave, onCancel, loadi
           </label>
           <select
             value={formData.type}
-            onChange={(e) => handleChange('type', e.target.value)}
+            onChange={(e) => handleChange('type', e.target.value as Material['type'])}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             required
           >

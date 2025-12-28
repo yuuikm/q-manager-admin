@@ -24,6 +24,11 @@ import Users from "pages/Users";
 import InternalDocumentList from "pages/InternalDocumentList";
 import InternalDocumentUpload from "pages/InternalDocumentUpload";
 import InternalDocumentView from "pages/InternalDocumentView";
+import ManagerHelpList from "pages/ManagerHelpList";
+import ManagerHelpUpload from "pages/ManagerHelpUpload";
+import ManagerHelpCategories from "pages/ManagerHelpCategories";
+import SliderList from "pages/SliderList";
+import SliderUpload from "pages/SliderUpload";
 import RouteWrapper from "components/RouteWrapper";
 import "./App.css";
 import { LINKS } from "constants/routes.ts";
@@ -35,7 +40,7 @@ function AppContent() {
   const { isAuthenticated, user, isLoading } = useAppSelector(
     (state: any) => state.auth,
   );
-  
+
   // Local state to track if we've completed initial auth check
   const [authChecked, setAuthChecked] = useState(false);
 
@@ -86,21 +91,21 @@ function AppContent() {
           </RouteWrapper>
         }
       />
-      <Route 
-        path={LINKS.dashboardLink} 
+      <Route
+        path={LINKS.dashboardLink}
         element={
           <RouteWrapper>
             <Dashboard />
           </RouteWrapper>
-        } 
+        }
       />
-      <Route 
-        path={LINKS.documentsLink} 
+      <Route
+        path={LINKS.documentsLink}
         element={
           <RouteWrapper>
             <DocumentList />
           </RouteWrapper>
-        } 
+        }
       />
       <Route
         path={LINKS.documentsUploadLink}
@@ -118,21 +123,21 @@ function AppContent() {
           </RouteWrapper>
         }
       />
-      <Route 
-        path={LINKS.coursesLink} 
+      <Route
+        path={LINKS.coursesLink}
         element={
           <RouteWrapper>
             <CourseList />
           </RouteWrapper>
-        } 
+        }
       />
-      <Route 
-        path={LINKS.coursesUploadLink} 
+      <Route
+        path={LINKS.coursesUploadLink}
         element={
           <RouteWrapper>
             <CourseUpload />
           </RouteWrapper>
-        } 
+        }
       />
       <Route
         path={LINKS.coursesCategoryLink}
@@ -142,53 +147,53 @@ function AppContent() {
           </RouteWrapper>
         }
       />
-      <Route 
-        path={LINKS.newsLink} 
+      <Route
+        path={LINKS.newsLink}
         element={
           <RouteWrapper>
             <NewsList />
           </RouteWrapper>
-        } 
+        }
       />
-      <Route 
-        path={LINKS.newsUploadLink} 
+      <Route
+        path={LINKS.newsUploadLink}
         element={
           <RouteWrapper>
             <NewsUpload />
           </RouteWrapper>
-        } 
+        }
       />
-      <Route 
-        path={LINKS.newsCategoryLink} 
+      <Route
+        path={LINKS.newsCategoryLink}
         element={
           <RouteWrapper>
             <NewsCategories />
           </RouteWrapper>
-        } 
+        }
       />
-      <Route 
-        path={LINKS.testsLink} 
+      <Route
+        path={LINKS.testsLink}
         element={
           <RouteWrapper>
             <Tests />
           </RouteWrapper>
-        } 
+        }
       />
-      <Route 
-        path={LINKS.usersLink} 
+      <Route
+        path={LINKS.usersLink}
         element={
           <RouteWrapper>
             <Users />
           </RouteWrapper>
-        } 
+        }
       />
-      <Route 
-        path={LINKS.internalDocumentsLink} 
+      <Route
+        path={LINKS.internalDocumentsLink}
         element={
           <RouteWrapper>
             <InternalDocumentList />
           </RouteWrapper>
-        } 
+        }
       />
       <Route
         path={LINKS.internalDocumentsUploadLink}
@@ -198,13 +203,53 @@ function AppContent() {
           </RouteWrapper>
         }
       />
-      <Route 
-        path={LINKS.internalDocumentsViewLink} 
+      <Route
+        path={LINKS.internalDocumentsViewLink}
         element={
           <RouteWrapper>
             <InternalDocumentView />
           </RouteWrapper>
-        } 
+        }
+      />
+      <Route
+        path={LINKS.managerHelpLink}
+        element={
+          <RouteWrapper>
+            <ManagerHelpList />
+          </RouteWrapper>
+        }
+      />
+      <Route
+        path={LINKS.managerHelpUploadLink}
+        element={
+          <RouteWrapper>
+            <ManagerHelpUpload />
+          </RouteWrapper>
+        }
+      />
+      <Route
+        path={LINKS.managerHelpCategoryLink}
+        element={
+          <RouteWrapper>
+            <ManagerHelpCategories />
+          </RouteWrapper>
+        }
+      />
+      <Route
+        path={LINKS.sliderLink}
+        element={
+          <RouteWrapper>
+            <SliderList />
+          </RouteWrapper>
+        }
+      />
+      <Route
+        path={LINKS.sliderUploadLink}
+        element={
+          <RouteWrapper>
+            <SliderUpload />
+          </RouteWrapper>
+        }
       />
       <Route path="*" element={<Navigate to={LINKS.loginLink} replace />} />
     </Routes>

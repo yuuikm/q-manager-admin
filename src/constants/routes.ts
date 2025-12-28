@@ -16,4 +16,9 @@ export const LINKS = {
   internalDocumentsLink: '/internal-documents',
   internalDocumentsUploadLink: '/internal-documents/upload',
   internalDocumentsViewLink: '/internal-documents/:id',
+  managerHelpLink: '/manager-help',
+  managerHelpUploadLink: '/manager-help/upload',
+  managerHelpCategoryLink: '/manager-help/categories',
+  sliderLink: '/slider',
+  sliderUploadLink: '/slider/upload',
 };

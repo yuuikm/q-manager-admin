@@ -14,11 +14,22 @@ export interface Document {
   created_by: number;
   created_at: string;
   updated_at: string;
-  creator?: {
-    id: number;
-    username: string;
-    email: string;
-  };
+  creator?: Creator;
+}
+
+export interface Creator {
+  id: number;
+  username: string;
+  email: string;
+}
+
+export interface Admin {
+  id: number;
+  username: string;
+  email: string;
+  first_name: string | null;
+  last_name: string | null;
+  role: string;
 }
 
 export interface DocumentFormData {
@@ -68,16 +79,27 @@ export const adminAPI = {
     return response.json();
   },
 
-  async getDocuments(params?: { page?: number; category?: string; search?: string }): Promise<DocumentsResponse> {
+  async getDocuments(params?: {
+    page?: number;
+    category?: string;
+    search?: string;
+    author_id?: number | string;
+    start_date?: string;
+    end_date?: string;
+  }): Promise<DocumentsResponse> {
     const token = localStorage.getItem('auth_token');
     if (!token) {
       throw new Error('No token found');
     }
 
     const url = new URL(ADMIN_ENDPOINTS.GET_DOCUMENTS);
-    if (params?.page) url.searchParams.append('page', params.page.toString());
-    if (params?.category) url.searchParams.append('category', params.category);
-    if (params?.search) url.searchParams.append('search', params.search);
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== "") {
+          url.searchParams.append(key, value.toString());
+        }
+      });
+    }
 
     const response = await fetch(url.toString(), {
       headers: {
@@ -91,6 +113,28 @@ export const adminAPI = {
     }
 
     return response.json();
+  },
+
+  async getAdmins(): Promise<{ id: number; name: string }[]> {
+    const token = localStorage.getItem('auth_token');
+    const response = await fetch(ADMIN_ENDPOINTS.GET_ADMINS, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch admins');
+    }
+
+    const admins = await response.json();
+    return admins.map((admin: Admin) => ({
+      id: admin.id,
+      name: admin.first_name && admin.last_name
+        ? `${admin.first_name} ${admin.last_name}`
+        : admin.username
+    }));
   },
 
 

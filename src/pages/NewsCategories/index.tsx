@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppSelector } from 'store/hooks';
 import { LINKS } from 'constants/routes';
@@ -14,7 +14,7 @@ interface Category {
 
 const NewsCategories = () => {
   const navigate = useNavigate();
-  const { token } = useAppSelector((state: any) => state.auth);
+  const { token } = useAppSelector((state) => state.auth);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -23,11 +23,7 @@ const NewsCategories = () => {
     name: '',
   });
 
-  useEffect(() => {
-    fetchCategories();
-  }, []);
-
-  const fetchCategories = async () => {
+  const fetchCategories = useCallback(async () => {
     try {
       if (!token) {
         console.error('No auth token found');
@@ -50,11 +46,15 @@ const NewsCategories = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    fetchCategories();
+  }, [fetchCategories]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       if (!token) {
         console.error('No auth token found');
@@ -62,12 +62,12 @@ const NewsCategories = () => {
       }
 
       const baseUrl = ADMIN_ENDPOINTS.NEWS_CATEGORIES;
-      const url = editingCategory 
+      const url = editingCategory
         ? `${baseUrl}/${editingCategory.id}`
         : baseUrl;
-      
+
       const method = editingCategory ? 'PUT' : 'POST';
-      
+
       const response = await fetch(url, {
         method,
         headers: {
@@ -248,7 +248,7 @@ const NewsCategories = () => {
               <h3 className="text-lg font-medium text-gray-900 mb-4">
                 {editingCategory ? 'Редактировать категорию' : 'Добавить новую категорию'}
               </h3>
-              
+
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
