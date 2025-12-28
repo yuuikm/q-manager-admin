@@ -41,7 +41,14 @@ const ManagerHelpList: FC = () => {
         try {
             setLoading(true);
             const response = await managerHelpAPI.getHelps(filters);
-            setHelps(response.data || []);
+            console.log('fetchHelps response:', response);
+            let helpsData: ManagerHelp[] = [];
+            if (Array.isArray(response)) {
+                helpsData = response;
+            } else if (response && typeof response === 'object' && Array.isArray((response as any).data)) {
+                helpsData = (response as any).data;
+            }
+            setHelps(helpsData);
             if (response.current_page) {
                 setPagination({
                     current_page: response.current_page,

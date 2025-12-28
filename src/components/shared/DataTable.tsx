@@ -69,6 +69,9 @@ const DataTable = <T extends { id?: string | number | null | undefined }>({
   authors = [],
   initialSearchValue = "",
 }: DataTableProps<T>) => {
+  // Safe data handling
+  const safeData = Array.isArray(data) ? data : [];
+
   const [searchValue, setSearchValue] = useState(initialSearchValue);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -234,7 +237,7 @@ const DataTable = <T extends { id?: string | number | null | undefined }>({
           <div className="flex items-center justify-center h-64">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
           </div>
-        ) : data.length === 0 ? (
+        ) : safeData.length === 0 ? (
           <div className="text-center py-12 bg-gray-50 rounded-lg">
             <p className="text-gray-600 text-lg mb-4">{emptyMessage}</p>
             <p className="text-gray-500">{emptyDescription}</p>
@@ -260,7 +263,7 @@ const DataTable = <T extends { id?: string | number | null | undefined }>({
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {data.map((item, index) => (
+                {safeData.map((item, index) => (
                   <tr key={item.id || index} className="hover:bg-gray-50 transition-colors">
                     {columns.map((column) => (
                       <td key={column.key} className="px-6 py-4">

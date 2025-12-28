@@ -31,7 +31,8 @@ import SliderList from "pages/SliderList";
 import SliderUpload from "pages/SliderUpload";
 import RouteWrapper from "components/RouteWrapper";
 import "./App.css";
-import { LINKS } from "constants/routes.ts";
+import ErrorBoundary from '@/components/ErrorBoundary';
+import { LINKS } from '@/constants/routes';
 
 // Component that handles authentication logic with navigation
 function AppContent() {
@@ -65,7 +66,7 @@ function AppContent() {
       localStorage.removeItem("auth_token");
       navigate(LINKS.loginLink);
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, user, navigate]);
 
   // Show loading only during initial authentication check
   if (!authChecked || (isLoading && localStorage.getItem("auth_token"))) {
@@ -215,7 +216,9 @@ function AppContent() {
         path={LINKS.managerHelpLink}
         element={
           <RouteWrapper>
-            <ManagerHelpList />
+            <ErrorBoundary>
+              <ManagerHelpList />
+            </ErrorBoundary>
           </RouteWrapper>
         }
       />

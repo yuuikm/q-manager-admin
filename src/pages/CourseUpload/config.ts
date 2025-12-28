@@ -1,5 +1,6 @@
 import * as Yup from 'yup';
 import { type FormField } from '@/components/shared/FormController';
+import { type Material } from '@/components/shared/MaterialsManager';
 
 // Validation schema
 export const courseValidationSchema = Yup.object({
