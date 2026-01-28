@@ -1,4 +1,6 @@
-export const API_BASE_URL = 'https://back.q-manager.kz/api';
+export const BASE_URL = 'https://back.q-manager.kz';
+
+export const API_BASE_URL = `${BASE_URL}/api`;
 
 export const AUTH_ENDPOINTS = {
     LOGIN: `${API_BASE_URL}/auth/login`,

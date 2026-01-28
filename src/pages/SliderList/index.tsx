@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { LINKS } from '@/constants/routes';
-import { sliderAPI, Slider } from '@/api/slider';
+import React, {useState, useEffect, useCallback, useMemo} from 'react';
+import {useNavigate} from 'react-router-dom';
+import {LINKS} from '@/constants/routes';
+import {sliderAPI, Slider} from '@/api/slider';
 import DataTable from '@/components/shared/DataTable';
+import {BASE_URL} from "constants/endpoints.ts";
 
 const SliderList: React.FC = () => {
     const [sliders, setSliders] = useState<Slider[]>([]);
@@ -51,14 +52,14 @@ const SliderList: React.FC = () => {
     const handleSearch = useCallback((value: string) => {
         setFilters((prev) => {
             if (prev.search === value) return prev;
-            return { ...prev, search: value, page: 1 };
+            return {...prev, search: value, page: 1};
         });
     }, []);
 
     const handlePageChange = useCallback((page: number) => {
         setFilters((prev) => {
             if (prev.page === page) return prev;
-            return { ...prev, page };
+            return {...prev, page};
         });
     }, []);
 
@@ -77,7 +78,7 @@ const SliderList: React.FC = () => {
         try {
             await sliderAPI.toggleStatus(id);
             setSliders((prev) =>
-                prev.map((s) => (s.id === id ? { ...s, is_active: !s.is_active } : s))
+                prev.map((s) => (s.id === id ? {...s, is_active: !s.is_active} : s))
             );
         } catch (err) {
             console.error('Error toggling slider status:', err);
@@ -86,7 +87,7 @@ const SliderList: React.FC = () => {
     }, []);
 
     const handleEditSlider = useCallback((slider: Slider) => {
-        navigate(LINKS.sliderUploadLink, { state: { editMode: true, sliderData: slider } });
+        navigate(LINKS.sliderUploadLink, {state: {editMode: true, sliderData: slider}});
     }, [navigate]);
 
     const sliderColumns = useMemo(() => [
@@ -96,7 +97,7 @@ const SliderList: React.FC = () => {
             render: (slider: Slider) => (
                 <div className="w-32 h-20 bg-gray-100 rounded overflow-hidden">
                     <img
-                        src={`http://localhost:8000/storage/${slider.image_path}`}
+                        src={`${BASE_URL}/storage/${slider.image_path}`}
                         alt={slider.title || 'Slide'}
                         className="w-full h-full object-cover"
                     />
@@ -128,7 +129,7 @@ const SliderList: React.FC = () => {
                 <button
                     onClick={() => handleToggleStatus(slider.id)}
                     className={`px-2 py-1 text-xs font-semibold rounded-full ${slider.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                        }`}
+                    }`}
                 >
                     {slider.is_active ? 'Активен' : 'Неактивен'}
                 </button>
