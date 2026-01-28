@@ -1,4 +1,4 @@
-export const BASE_URL = 'https://back.q-manager.kz';
+export const BASE_URL = 'http://localhost:8000';
 
 export const API_BASE_URL = `${BASE_URL}/api`;
 
@@ -18,6 +18,13 @@ export const ADMIN_ENDPOINTS = {
 
     // Document Categories
     DOCUMENT_CATEGORIES: `${API_BASE_URL}/admin/document-categories`,
+
+    // Document Subcategories
+    DOCUMENT_SUBCATEGORIES: `${API_BASE_URL}/admin/document-subcategories`,
+    DOCUMENT_SUBCATEGORIES_BY_CATEGORY: `${API_BASE_URL}/admin/document-subcategories/by-category`,
+
+    // Document Types
+    DOCUMENT_TYPES: `${API_BASE_URL}/admin/document-types`,
 
     // News
     NEWS: `${API_BASE_URL}/admin/news`,

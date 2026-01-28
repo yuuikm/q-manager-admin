@@ -12,7 +12,9 @@ import { adminAPI, Document as ApiDocument } from '@/api/admin';
 // Extend ApiDocument to include properties used in this view if they are missing
 interface ViewDocument extends ApiDocument {
   buy_number?: number;
-  category_name?: string; // If category is returned as string in api.ts but we need to handle object case too
+  category_name?: string;
+  subcategory?: { id: number; name: string } | string | null;
+  document_type?: string | null;
 }
 
 const DocumentList = () => {
@@ -231,10 +233,24 @@ const DocumentList = () => {
   ), []);
 
   const renderCategoryColumn = useCallback((document: ViewDocument) => (
-    <div className="text-sm text-gray-900">
-      {typeof document.category === 'object' && document.category !== null
-        ? (document.category as { name: string }).name
-        : (document.category || "Без категории")}
+    <div>
+      <div className="text-sm font-medium text-gray-900">
+        {typeof document.category === 'object' && document.category !== null
+          ? (document.category as { name: string }).name
+          : (document.category || "Без категории")}
+      </div>
+      {document.subcategory && (
+        <div className="text-xs text-gray-500 mt-1">
+          📂 {typeof document.subcategory === 'object' && document.subcategory !== null
+            ? (document.subcategory as { name: string }).name
+            : document.subcategory}
+        </div>
+      )}
+      {document.document_type && (
+        <div className="text-xs text-blue-600 mt-1">
+          📄 {document.document_type}
+        </div>
+      )}
     </div>
   ), []);
 

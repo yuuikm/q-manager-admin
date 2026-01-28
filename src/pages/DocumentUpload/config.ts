@@ -13,6 +13,7 @@ export const documentValidationSchema = Yup.object({
     .max(500, 'Описание не должно превышать 500 символов'),
   price: Yup.number()
     .required('Цена обязательна')
+    .integer('Цена должна быть целым числом')
     .min(0, 'Цена не может быть отрицательной'),
   preview_pages: Yup.number()
     .when('editMode', {
@@ -26,6 +27,13 @@ export const documentValidationSchema = Yup.object({
   category: Yup.string()
     .required('Категория обязательна')
     .min(2, 'Название категории должно содержать минимум 2 символа'),
+  subcategory: Yup.string()
+    .nullable()
+    .notRequired()
+    .min(2, 'Название подкатегории должно содержать минимум 2 символа'),
+  document_type: Yup.string()
+    .nullable()
+    .notRequired(),
   file: Yup.mixed().when('editMode', {
     is: true,
     then: (schema) => schema.nullable(),
@@ -72,10 +80,10 @@ export const documentFormFields: FormField[] = [
     name: 'price',
     type: 'number',
     label: 'Цена (KZT)',
-    placeholder: '0.00',
+    placeholder: '0',
     required: true,
     min: 0,
-    step: 0.01,
+    // No step attribute to remove arrows and enforce integer input
   },
   {
     name: 'preview_pages',
@@ -96,6 +104,22 @@ export const documentFormFields: FormField[] = [
     options: [], // Will be populated dynamically
   },
   {
+    name: 'subcategory',
+    type: 'searchable-select',
+    label: 'Подкатегория',
+    placeholder: 'Введите название подкатегории или выберите существующую',
+    required: false,
+    options: [], // Will be populated dynamically based on selected category
+  },
+  {
+    name: 'document_type',
+    type: 'select',
+    label: 'Тип документа',
+    placeholder: 'Выберите тип документа',
+    required: false,
+    options: [], // Will be populated dynamically from backend
+  },
+  {
     name: 'file',
     type: 'file',
     label: 'Файл документа',
@@ -113,6 +137,8 @@ export const getDocumentInitialValues = (editMode: boolean, documentData: any) =
   price: editMode && documentData ? documentData.price : 0,
   preview_pages: editMode && documentData ? (documentData.preview_pages || 3) : 3,
   category: editMode && documentData ? documentData.category?.name : '',
+  subcategory: editMode && documentData ? documentData.subcategory?.name : '',
+  document_type: editMode && documentData ? documentData.document_type : '',
   file: undefined, // Use undefined instead of null for file input
   currentFileName: editMode && documentData ? documentData.file_name : undefined,
 });

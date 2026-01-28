@@ -3,16 +3,22 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { ADMIN_ENDPOINTS } from 'constants/endpoints';
 import { LINKS } from 'constants/routes';
 import FormController from '@/components/shared/FormController';
-import { 
-  documentFormFields, 
-  documentValidationSchema, 
-  getDocumentInitialValues 
+import {
+  documentFormFields,
+  documentValidationSchema,
+  getDocumentInitialValues
 } from './config';
 import { type FormField, type SelectOption } from '@/components/shared/FormController';
 
 interface Category {
   id: number;
   name: string;
+}
+
+interface Subcategory {
+  id: number;
+  name: string;
+  category_id: number;
 }
 
 const DocumentUpload: FC = () => {
@@ -24,13 +30,17 @@ const DocumentUpload: FC = () => {
     message: string;
   }>({ type: null, message: '' });
   const [categories, setCategories] = useState<Category[]>([]);
-  
+  const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
+  const [documentTypes, setDocumentTypes] = useState<string[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
+
   // Edit mode state
   const editMode = location.state?.editMode || false;
   const documentData = location.state?.documentData || null;
 
   useEffect(() => {
     fetchCategories();
+    fetchDocumentTypes();
   }, []);
 
   const fetchCategories = async () => {
@@ -46,12 +56,56 @@ const DocumentUpload: FC = () => {
       if (response.ok) {
         const data = await response.json();
         setCategories(data);
+
+        // If editing and has category, fetch subcategories
+        if (editMode && documentData?.category?.id) {
+          setSelectedCategoryId(documentData.category.id);
+          fetchSubcategories(documentData.category.id);
+        }
       } else if (response.status === 401) {
         localStorage.removeItem('auth_token');
         navigate(LINKS.loginLink);
       }
     } catch (error) {
       console.error('Ошибка загрузки категорий:', error);
+    }
+  };
+
+  const fetchSubcategories = async (categoryId: number) => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      const response = await fetch(`${ADMIN_ENDPOINTS.DOCUMENT_SUBCATEGORIES_BY_CATEGORY}/${categoryId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSubcategories(data);
+      }
+    } catch (error) {
+      console.error('Ошибка загрузки подкатегорий:', error);
+    }
+  };
+
+  const fetchDocumentTypes = async () => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      const response = await fetch(ADMIN_ENDPOINTS.DOCUMENT_TYPES, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setDocumentTypes(data);
+      }
+    } catch (error) {
+      console.error('Ошибка загрузки типов документов:', error);
     }
   };
 
@@ -62,18 +116,18 @@ const DocumentUpload: FC = () => {
     try {
       const token = localStorage.getItem('auth_token');
       const formData = new FormData();
-      
+
       formData.append('title', values.title);
       if (values.description && values.description.toString().trim().length > 0) {
         formData.append('description', values.description.toString().trim());
       }
       formData.append('price', values.price.toString());
-      
+
       // Only append preview_pages if not in edit mode or if explicitly provided
       if (!editMode || values.preview_pages !== undefined) {
         formData.append('preview_pages', values.preview_pages.toString());
       }
-      
+
       // Handle category - send the category name directly
       const categoryName = values.category.trim();
       if (!categoryName) {
@@ -81,20 +135,30 @@ const DocumentUpload: FC = () => {
         setUploading(false);
         return;
       }
-      
+
       formData.append('category', categoryName);
-      
+
+      // Handle subcategory if provided
+      if (values.subcategory && values.subcategory.trim()) {
+        formData.append('subcategory', values.subcategory.trim());
+      }
+
+      // Handle document type if provided
+      if (values.document_type) {
+        formData.append('document_type', values.document_type);
+      }
+
       if (values.file) {
         formData.append('file', values.file);
       }
 
-      const url = editMode 
+      const url = editMode
         ? `${ADMIN_ENDPOINTS.UPDATE_DOCUMENT}/${documentData.id}`
         : ADMIN_ENDPOINTS.UPLOAD_DOCUMENT;
-      
+
       // Use POST for both create and update, with _method field for updates
       const method = 'POST';
-      
+
       if (editMode) {
         formData.append('_method', 'PUT');
       }
@@ -125,7 +189,7 @@ const DocumentUpload: FC = () => {
           type: 'success',
           message: editMode ? 'Документ успешно обновлен' : 'Документ успешно загружен',
         });
-        
+
         // Redirect to documents list after successful upload
         setTimeout(() => {
           navigate(LINKS.documentsLink);
@@ -162,11 +226,48 @@ const DocumentUpload: FC = () => {
     label: cat.name,
   }));
 
+  // Update subcategory options in form fields
+  const subcategoryOptions: SelectOption[] = subcategories.map(sub => ({
+    value: sub.name,
+    label: sub.name,
+  }));
+
+  // Update document type options
+  const documentTypeOptions: SelectOption[] = documentTypes.map(type => ({
+    value: type,
+    label: type,
+  }));
+
+  // Handle category change to fetch subcategories
+  const handleCategoryChange = (categoryName: string) => {
+    const category = categories.find(cat => cat.name === categoryName);
+    if (category) {
+      setSelectedCategoryId(category.id);
+      fetchSubcategories(category.id);
+    } else {
+      setSelectedCategoryId(null);
+      setSubcategories([]);
+    }
+  };
+
   const formFields: FormField[] = documentFormFields.map(field => {
     if (field.name === 'category') {
       return {
         ...field,
         options: categoryOptions,
+        onChange: handleCategoryChange,
+      };
+    }
+    if (field.name === 'subcategory') {
+      return {
+        ...field,
+        options: subcategoryOptions,
+      };
+    }
+    if (field.name === 'document_type') {
+      return {
+        ...field,
+        options: documentTypeOptions,
       };
     }
     return field;
@@ -174,8 +275,8 @@ const DocumentUpload: FC = () => {
 
   const formConfig = {
     title: editMode ? 'Редактирование документа' : 'Загрузка документа',
-    description: editMode 
-      ? 'Измените данные документа' 
+    description: editMode
+      ? 'Измените данные документа'
       : 'Загрузите новый документ в систему',
     fields: formFields,
     submitButtonText: editMode ? 'Обновить документ' : 'Загрузить документ',
@@ -191,16 +292,15 @@ const DocumentUpload: FC = () => {
     <div className="p-6">
       {uploadStatus.type && (
         <div
-          className={`mb-4 p-4 rounded-md ${
-            uploadStatus.type === 'success'
-              ? 'bg-green-100 text-green-800 border border-green-200'
-              : 'bg-red-100 text-red-800 border border-red-200'
-          }`}
+          className={`mb-4 p-4 rounded-md ${uploadStatus.type === 'success'
+            ? 'bg-green-100 text-green-800 border border-green-200'
+            : 'bg-red-100 text-red-800 border border-red-200'
+            }`}
         >
           {uploadStatus.message}
         </div>
       )}
-      
+
       <FormController {...formConfig} />
     </div>
   );
