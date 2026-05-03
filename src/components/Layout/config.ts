@@ -63,15 +63,9 @@ export const layoutMenuItems: LayoutMenuItem[] = [
         isActive: (pathname: string) => pathname.startsWith(LINKS.usersLink),
     },
     {
-        path: LINKS.usersLink,
-        label: 'Подпись эцп',
-        icon: '🔑',
-        isActive: (pathname: string) => pathname.startsWith(LINKS.usersLink),
-    },
-    {
-        path: LINKS.usersLink,
+        path: LINKS.mediaFilesLink,
         label: 'Медиафайлы',
-        icon: '📝',
-        isActive: (pathname: string) => pathname.startsWith(LINKS.usersLink),
+        icon: '🗂️',
+        isActive: (pathname: string) => pathname.startsWith(LINKS.mediaFilesLink),
     },
 ];
