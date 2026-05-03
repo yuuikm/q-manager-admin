@@ -32,7 +32,6 @@ const DocumentUpload: FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [documentTypes, setDocumentTypes] = useState<string[]>([]);
-  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
 
   // Edit mode state
   const editMode = location.state?.editMode || false;
@@ -41,7 +40,7 @@ const DocumentUpload: FC = () => {
   useEffect(() => {
     fetchCategories();
     fetchDocumentTypes();
-  }, []);
+  },);
 
   const fetchCategories = async () => {
     try {
@@ -59,7 +58,6 @@ const DocumentUpload: FC = () => {
 
         // If editing and has category, fetch subcategories
         if (editMode && documentData?.category?.id) {
-          setSelectedCategoryId(documentData.category.id);
           fetchSubcategories(documentData.category.id);
         }
       } else if (response.status === 401) {
@@ -242,10 +240,8 @@ const DocumentUpload: FC = () => {
   const handleCategoryChange = (categoryName: string) => {
     const category = categories.find(cat => cat.name === categoryName);
     if (category) {
-      setSelectedCategoryId(category.id);
       fetchSubcategories(category.id);
     } else {
-      setSelectedCategoryId(null);
       setSubcategories([]);
     }
   };

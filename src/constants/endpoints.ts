@@ -65,5 +65,11 @@ export const ADMIN_ENDPOINTS = {
 
     // Categories (legacy)
     CATEGORIES: `${API_BASE_URL}/admin/categories`,
+
+    // Media files
+    MEDIA: `${API_BASE_URL}/admin/media`,
+
+    // Dashboard
+    DASHBOARD_STATS: `${API_BASE_URL}/admin/dashboard/stats`,
 };
 

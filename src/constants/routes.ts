@@ -21,4 +21,5 @@ export const LINKS = {
   managerHelpCategoryLink: '/manager-help/categories',
   sliderLink: '/slider',
   sliderUploadLink: '/slider/upload',
+  mediaFilesLink: '/media-files',
 };
