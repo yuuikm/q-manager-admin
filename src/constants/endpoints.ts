@@ -1,4 +1,4 @@
-export const BASE_URL = 'http://localhost:8000';
+export const BASE_URL = 'https://back.q-manager.kz';
 
 export const API_BASE_URL = `${BASE_URL}/api`;
 

@@ -42,13 +42,6 @@ const ApplicationsContent: FC = () => {
     }
   };
 
-  const getStatusLabel = (status: string) => {
-    if (status === 'created') return { text: 'Создана', color: 'bg-yellow-100 text-yellow-800' };
-    if (status === 'contract') return { text: 'Договор', color: 'bg-blue-100 text-blue-800' };
-    if (status === 'paid') return { text: 'Оплачено', color: 'bg-green-100 text-green-800' };
-    return { text: status, color: 'bg-gray-100 text-gray-800' };
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -123,7 +116,7 @@ const ApplicationsContent: FC = () => {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {applications.map((app) => {
-                  const statusInfo = getStatusLabel(app.payment_status);
+
                   return (
                     <tr key={`${app.type}-${app.id}`} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
