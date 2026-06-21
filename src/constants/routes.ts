@@ -22,4 +22,5 @@ export const LINKS = {
   sliderLink: '/slider',
   sliderUploadLink: '/slider/upload',
   mediaFilesLink: '/media-files',
+  applicationsLink: '/applications',
 };

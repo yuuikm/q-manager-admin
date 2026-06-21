@@ -30,6 +30,7 @@ import ManagerHelpCategories from "pages/ManagerHelpCategories";
 import SliderList from "pages/SliderList";
 import SliderUpload from "pages/SliderUpload";
 import MediaFiles from "pages/MediaFiles";
+import Applications from "pages/Applications";
 import RouteWrapper from "components/RouteWrapper";
 import "./App.css";
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -260,6 +261,14 @@ function AppContent() {
         element={
           <RouteWrapper>
             <MediaFiles />
+          </RouteWrapper>
+        }
+      />
+      <Route
+        path={LINKS.applicationsLink}
+        element={
+          <RouteWrapper>
+            <Applications />
           </RouteWrapper>
         }
       />
