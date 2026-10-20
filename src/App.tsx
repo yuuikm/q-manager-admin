@@ -31,6 +31,7 @@ import SliderList from "pages/SliderList";
 import SliderUpload from "pages/SliderUpload";
 import MediaFiles from "pages/MediaFiles";
 import Applications from "pages/Applications";
+import FaqList from "pages/FaqList";
 import RouteWrapper from "components/RouteWrapper";
 import "./App.css";
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -269,6 +270,14 @@ function AppContent() {
         element={
           <RouteWrapper>
             <Applications />
+          </RouteWrapper>
+        }
+      />
+      <Route
+        path={LINKS.faqsLink}
+        element={
+          <RouteWrapper>
+            <FaqList />
           </RouteWrapper>
         }
       />

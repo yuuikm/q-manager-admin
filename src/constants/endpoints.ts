@@ -1,4 +1,8 @@
-export const BASE_URL = 'https://back.q-manager.kz';
+export const BASE_URL =
+    import.meta.env.VITE_API_URL ||
+    (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+        ? 'http://localhost:8000'
+        : 'https://back.q-manager.kz');
 
 export const API_BASE_URL = `${BASE_URL}/api`;
 
@@ -71,5 +75,10 @@ export const ADMIN_ENDPOINTS = {
 
     // Dashboard
     DASHBOARD_STATS: `${API_BASE_URL}/admin/dashboard/stats`,
+
+    // FAQs
+    FAQS: `${API_BASE_URL}/admin/faqs`,
+    FAQS_TREE: `${API_BASE_URL}/admin/faqs/tree`,
+    TOGGLE_FAQ_STATUS: `${API_BASE_URL}/admin/faqs`,
 };
 
