@@ -60,7 +60,7 @@ export const applicationsAPI = {
     return response.json();
   },
 
-  async updateStatus(type: 'course' | 'document', id: number, status: string): Promise<any> {
+  async updateStatus(type: 'course' | 'document' | 'lead' | string, id: number, status: string): Promise<any> {
     const token = localStorage.getItem('auth_token');
     if (!token) throw new Error('No token found');
 
