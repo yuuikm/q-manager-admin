@@ -75,6 +75,12 @@ export const layoutMenuItems: LayoutMenuItem[] = [
         isActive: (pathname: string) => pathname.startsWith(LINKS.applicationsLink),
     },
     {
+        path: LINKS.leadsLink,
+        label: 'Лиды',
+        icon: '🎯',
+        isActive: (pathname: string) => pathname.startsWith(LINKS.leadsLink),
+    },
+    {
         path: LINKS.faqsLink,
         label: 'Вопросы и ответы',
         icon: '💬',

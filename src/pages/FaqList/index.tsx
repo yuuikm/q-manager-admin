@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { faqAPI, type Faq, type FaqFormData } from '@/api/faq';
+import { leadsAPI, type Lead } from '@/api/leads';
 import Button from '@/components/shared/Button';
 
 export const FaqList: React.FC = () => {
@@ -10,9 +11,16 @@ export const FaqList: React.FC = () => {
   const [viewMode, setViewMode] = useState<'tree' | 'table'>('tree');
   const [expandedNodes, setExpandedNodes] = useState<Record<number, boolean>>({});
 
+  // Main Tabs: 'knowledge_base' (Tree/Table) or 'user_questions' (Questions from visitors)
+  const [mainTab, setMainTab] = useState<'knowledge_base' | 'user_questions'>('knowledge_base');
+  const [userQuestions, setUserQuestions] = useState<Lead[]>([]);
+  const [loadingUserQuestions, setLoadingUserQuestions] = useState(false);
+  const [userQuestionFilter, setUserQuestionFilter] = useState<'all' | 'unanswered'>('all');
+
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingFaq, setEditingFaq] = useState<Faq | null>(null);
+  const [sourceLeadId, setSourceLeadId] = useState<number | null>(null);
   const [parentSelectOptions, setParentSelectOptions] = useState<Faq[]>([]);
   const [modalForm, setModalForm] = useState<FaqFormData>({
     question: '',
@@ -32,7 +40,7 @@ export const FaqList: React.FC = () => {
       const data = await faqAPI.getFaqs({ flat: false });
       setFaqs(data);
 
-      // Also pre-expand root nodes initially
+      // Pre-expand root nodes initially
       const initialExpanded: Record<number, boolean> = {};
       data.forEach(item => {
         if (!item.parent_id) {
@@ -45,6 +53,19 @@ export const FaqList: React.FC = () => {
       setError(err?.message || 'Не удалось загрузить вопросы');
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  // Load user questions from chat leads
+  const loadUserQuestions = useCallback(async () => {
+    try {
+      setLoadingUserQuestions(true);
+      const data = await leadsAPI.getLeads();
+      setUserQuestions(data);
+    } catch (err) {
+      console.error('Failed to load user questions:', err);
+    } finally {
+      setLoadingUserQuestions(false);
     }
   }, []);
 
@@ -61,7 +82,13 @@ export const FaqList: React.FC = () => {
   useEffect(() => {
     loadData();
     loadParentOptions();
-  }, [loadData]);
+    loadUserQuestions();
+  }, [loadData, loadUserQuestions]);
+
+  // Unanswered user questions count
+  const unansweredCount = useMemo(() => {
+    return userQuestions.filter(q => !q.is_faq_added).length;
+  }, [userQuestions]);
 
   // Toggle node collapse/expand
   const toggleExpand = (id: number) => {
@@ -90,6 +117,7 @@ export const FaqList: React.FC = () => {
   // Open Create Modal (optionally for specific parent)
   const openCreateModal = (parentId: number | null = null) => {
     setEditingFaq(null);
+    setSourceLeadId(null);
     setModalForm({
       question: '',
       answer: '',
@@ -101,9 +129,25 @@ export const FaqList: React.FC = () => {
     setIsModalOpen(true);
   };
 
+  // Open modal pre-filled with user's question
+  const openAnswerUserQuestionModal = (lead: Lead) => {
+    setEditingFaq(null);
+    setSourceLeadId(lead.id);
+    setModalForm({
+      question: lead.question,
+      answer: '',
+      parent_id: null,
+      sort_order: 0,
+      is_active: true,
+    });
+    setModalError(null);
+    setIsModalOpen(true);
+  };
+
   // Open Edit Modal
   const openEditModal = (faq: Faq) => {
     setEditingFaq(faq);
+    setSourceLeadId(null);
     setModalForm({
       question: faq.question,
       answer: faq.answer,
@@ -131,15 +175,23 @@ export const FaqList: React.FC = () => {
       setSubmitting(true);
       setModalError(null);
 
+      let savedFaq: Faq;
       if (editingFaq) {
-        await faqAPI.updateFaq(editingFaq.id, modalForm);
+        savedFaq = await faqAPI.updateFaq(editingFaq.id, modalForm);
       } else {
-        await faqAPI.createFaq(modalForm);
+        savedFaq = await faqAPI.createFaq(modalForm);
+      }
+
+      // If answering a user question, mark the lead as is_faq_added
+      if (sourceLeadId && savedFaq) {
+        await leadsAPI.convertFaq(sourceLeadId, { faq_id: savedFaq.id });
+        setSourceLeadId(null);
       }
 
       setIsModalOpen(false);
       await loadData();
       await loadParentOptions();
+      await loadUserQuestions();
     } catch (err: any) {
       console.error('Error saving FAQ:', err);
       setModalError(err?.message || 'Ошибка сохранения');
@@ -181,7 +233,7 @@ export const FaqList: React.FC = () => {
     const idMap: Record<number, Faq & { children: Faq[] }> = {};
     const roots: (Faq & { children: Faq[] })[] = [];
 
-    // First clone items
+    // Clone items
     faqs.forEach(f => {
       idMap[f.id] = { ...f, children: [] };
     });
@@ -240,6 +292,22 @@ export const FaqList: React.FC = () => {
     );
   }, [faqs, search]);
 
+  // Filtered user questions
+  const filteredUserQuestions = useMemo(() => {
+    return userQuestions.filter(q => {
+      if (userQuestionFilter === 'unanswered' && q.is_faq_added) return false;
+      if (search.trim()) {
+        const sq = search.toLowerCase();
+        return (
+          q.question.toLowerCase().includes(sq) ||
+          q.phone.toLowerCase().includes(sq) ||
+          (q.email && q.email.toLowerCase().includes(sq))
+        );
+      }
+      return true;
+    });
+  }, [userQuestions, userQuestionFilter, search]);
+
   // Render a tree node recursively
   const renderTreeNode = (node: Faq & { children: Faq[] }, level: number = 0) => {
     const isExpanded = !!expandedNodes[node.id];
@@ -248,7 +316,6 @@ export const FaqList: React.FC = () => {
 
     return (
       <div key={node.id} className="relative transition-all">
-        {/* Node card */}
         <div
           className={`group flex items-start gap-3 p-4 rounded-xl border transition-all duration-200 mb-2.5 ${
             isRoot
@@ -257,14 +324,12 @@ export const FaqList: React.FC = () => {
           } ${!node.is_active ? 'opacity-70 border-dashed' : ''}`}
           style={{ marginLeft: `${level * 28}px` }}
         >
-          {/* Connector tree glyph for child levels */}
           {!isRoot && (
             <div className="absolute -left-4 top-6 text-gray-300 font-mono text-sm select-none">
               ↳
             </div>
           )}
 
-          {/* Expand / Collapse Button */}
           <button
             type="button"
             onClick={() => toggleExpand(node.id)}
@@ -278,7 +343,6 @@ export const FaqList: React.FC = () => {
             {hasChildren ? (isExpanded ? '▼' : '▶') : '•'}
           </button>
 
-          {/* Main Info */}
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2 mb-1.5">
               <span
@@ -319,7 +383,6 @@ export const FaqList: React.FC = () => {
               {node.question}
             </h4>
 
-            {/* Answer excerpt */}
             <div className="mt-2 text-sm text-gray-600 bg-gray-50/80 p-2.5 rounded-lg border border-gray-100 leading-relaxed">
               <span className="text-xs font-semibold text-blue-600 uppercase tracking-wider block mb-1">
                 Ответ помощника:
@@ -328,7 +391,6 @@ export const FaqList: React.FC = () => {
             </div>
           </div>
 
-          {/* Action buttons */}
           <div className="flex items-center gap-1.5 flex-shrink-0 self-center">
             <button
               type="button"
@@ -360,7 +422,6 @@ export const FaqList: React.FC = () => {
           </div>
         </div>
 
-        {/* Child branches if expanded */}
         {hasChildren && isExpanded && (
           <div className="ml-2 pl-3 border-l-2 border-blue-200/60 my-1 space-y-2">
             {node.children.map(child => renderTreeNode(child as any, level + 1))}
@@ -371,34 +432,85 @@ export const FaqList: React.FC = () => {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
       {/* Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-gray-200 mb-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-gray-200">
         <div>
           <div className="flex items-center gap-2">
             <span className="text-2xl">💬</span>
             <h1 className="text-2xl font-bold text-gray-900">Вопросы и ответы (FAQ)</h1>
           </div>
           <p className="text-sm text-gray-500 mt-1">
-            Управление иерархическим деревом вопросов и ответов для онлайн-помощника на сайте
+            Управление иерархическим деревом вопросов и готовых ответов онлайн-помощника
           </p>
         </div>
 
         <div className="flex items-center gap-2.5">
           <Button onClick={() => openCreateModal(null)} variant="primary">
-            + Создать вопрос
+            + Создать вопрос в FAQ
           </Button>
         </div>
       </div>
 
-      {/* Control bar: search, view switcher, expand/collapse */}
-      <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3 mb-6">
+      {/* Main Section Navigation Tabs */}
+      <div className="flex items-center gap-2 border-b border-gray-200 pb-2">
+        <button
+          type="button"
+          onClick={() => setMainTab('knowledge_base')}
+          className={`px-4 py-2 rounded-xl text-sm font-semibold transition cursor-pointer flex items-center gap-2 ${
+            mainTab === 'knowledge_base'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          <span>🌿 База знаний (Дерево веток)</span>
+          <span
+            className={`text-xs px-2 py-0.5 rounded-full ${
+              mainTab === 'knowledge_base' ? 'bg-white/25 text-white' : 'bg-gray-200 text-gray-700'
+            }`}
+          >
+            {faqs.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setMainTab('user_questions')}
+          className={`px-4 py-2 rounded-xl text-sm font-semibold transition cursor-pointer flex items-center gap-2 ${
+            mainTab === 'user_questions'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          <span>📥 Вопросы пользователей</span>
+          {unansweredCount > 0 ? (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-rose-500 text-white font-bold animate-pulse">
+              {unansweredCount} новых
+            </span>
+          ) : (
+            <span
+              className={`text-xs px-2 py-0.5 rounded-full ${
+                mainTab === 'user_questions' ? 'bg-white/25 text-white' : 'bg-gray-200 text-gray-700'
+              }`}
+            >
+              {userQuestions.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Control bar: search, view switcher / filter */}
+      <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="relative w-full sm:w-96">
           <input
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Поиск по вопросам и ответам..."
+            placeholder={
+              mainTab === 'knowledge_base'
+                ? 'Поиск по вопросам и ответам...'
+                : 'Поиск по вопросам пользователей, телефону...'
+            }
             className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           />
           <span className="absolute left-3 top-2.5 text-gray-400">🔍</span>
@@ -412,169 +524,314 @@ export const FaqList: React.FC = () => {
           )}
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-          {viewMode === 'tree' && (
-            <>
-              <button
-                type="button"
-                onClick={expandAll}
-                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition cursor-pointer"
-              >
-                Развернуть все
-              </button>
-              <button
-                type="button"
-                onClick={collapseAll}
-                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition cursor-pointer"
-              >
-                Свернуть все
-              </button>
-            </>
-          )}
+        {mainTab === 'knowledge_base' ? (
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            {viewMode === 'tree' && (
+              <>
+                <button
+                  type="button"
+                  onClick={expandAll}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition cursor-pointer"
+                >
+                  Развернуть все
+                </button>
+                <button
+                  type="button"
+                  onClick={collapseAll}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition cursor-pointer"
+                >
+                  Свернуть все
+                </button>
+              </>
+            )}
 
-          <div className="flex items-center bg-gray-100 p-1 rounded-lg border border-gray-200">
+            <div className="flex items-center bg-gray-100 p-1 rounded-lg border border-gray-200">
+              <button
+                type="button"
+                onClick={() => setViewMode('tree')}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition cursor-pointer ${
+                  viewMode === 'tree'
+                    ? 'bg-white text-blue-600 shadow-sm font-semibold'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                🌿 Дерево веток
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('table')}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition cursor-pointer ${
+                  viewMode === 'table'
+                    ? 'bg-white text-blue-600 shadow-sm font-semibold'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                📋 Таблица
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setViewMode('tree')}
-              className={`px-3 py-1 text-xs font-medium rounded-md transition cursor-pointer ${
-                viewMode === 'tree' ? 'bg-white text-blue-600 shadow-sm font-semibold' : 'text-gray-600 hover:text-gray-900'
+              onClick={() => setUserQuestionFilter('all')}
+              className={`px-3 py-1.5 text-xs rounded-lg font-medium transition cursor-pointer ${
+                userQuestionFilter === 'all'
+                  ? 'bg-blue-600 text-white font-semibold'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              🌿 Дерево веток
+              Все вопросы ({userQuestions.length})
             </button>
             <button
               type="button"
-              onClick={() => setViewMode('table')}
-              className={`px-3 py-1 text-xs font-medium rounded-md transition cursor-pointer ${
-                viewMode === 'table' ? 'bg-white text-blue-600 shadow-sm font-semibold' : 'text-gray-600 hover:text-gray-900'
+              onClick={() => setUserQuestionFilter('unanswered')}
+              className={`px-3 py-1.5 text-xs rounded-lg font-medium transition cursor-pointer ${
+                userQuestionFilter === 'unanswered'
+                  ? 'bg-blue-600 text-white font-semibold'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              📋 Таблица
+              Только ожидающие ответа ({unansweredCount})
             </button>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Main Content Area */}
-      {loading ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center shadow-sm">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-500 font-medium">Загрузка вопросов...</p>
-        </div>
-      ) : error ? (
-        <div className="bg-rose-50 border border-rose-200 rounded-xl p-6 text-rose-700 text-center">
-          <p className="font-semibold">{error}</p>
-          <Button onClick={loadData} variant="primary" className="mt-3">
-            Повторить
-          </Button>
-        </div>
-      ) : filteredTree.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center shadow-sm">
-          <span className="text-4xl block mb-2">💬</span>
-          <h3 className="text-lg font-semibold text-gray-800">Вопросов пока нет</h3>
-          <p className="text-gray-500 text-sm mt-1 max-w-md mx-auto">
-            {search ? 'По вашему запросу ничего не найдено.' : 'Создайте первый вопрос, чтобы посетители сайта могли получать полезные ответы.'}
-          </p>
-          <Button onClick={() => openCreateModal(null)} variant="primary" className="mt-4">
-            + Создать вопрос
-          </Button>
-        </div>
-      ) : viewMode === 'tree' ? (
-        <div className="space-y-3">
-          {filteredTree.map(rootNode => renderTreeNode(rootNode, 0))}
-        </div>
-      ) : (
-        /* Table View */
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-left text-sm">
-              <thead className="bg-gray-50 text-gray-600 font-semibold text-xs uppercase tracking-wider">
-                <tr>
-                  <th className="px-4 py-3.5">ID</th>
-                  <th className="px-4 py-3.5">Вопрос</th>
-                  <th className="px-4 py-3.5">Родительская ветка</th>
-                  <th className="px-4 py-3.5">Ответ помощника</th>
-                  <th className="px-4 py-3.5 text-center">Порядок</th>
-                  <th className="px-4 py-3.5 text-center">Статус</th>
-                  <th className="px-4 py-3.5 text-right">Действия</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
-                {filteredFlatList.map(item => (
-                  <tr key={item.id} className="hover:bg-gray-50/70 transition">
-                    <td className="px-4 py-3 text-gray-400 font-mono text-xs">#{item.id}</td>
-                    <td className="px-4 py-3 font-semibold text-gray-900 max-w-xs">
-                      {item.question}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 text-xs">
-                      {item.parent ? (
-                        <span className="inline-flex items-center gap-1 bg-gray-100 px-2 py-0.5 rounded text-gray-700">
-                          ↳ {item.parent.question}
-                        </span>
-                      ) : (
-                        <span className="text-blue-600 font-medium">Корневой вопрос</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 text-xs max-w-md truncate">
-                      {item.answer}
-                    </td>
-                    <td className="px-4 py-3 text-center text-gray-700 text-xs font-mono">
-                      {item.sort_order}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleStatus(item)}
-                        className={`px-2 py-0.5 text-xs font-medium rounded-full cursor-pointer ${
-                          item.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
-                        }`}
-                      >
-                        {item.is_active ? 'Активен' : 'Скрыт'}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => openCreateModal(item.id)}
-                          className="px-2 py-1 text-xs bg-blue-50 text-blue-700 hover:bg-blue-100 rounded"
-                          title="Добавить подвопрос"
-                        >
-                          + ветка
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openEditModal(item)}
-                          className="px-2 py-1 text-xs bg-gray-100 text-gray-700 hover:bg-gray-200 rounded"
-                          title="Редактировать"
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(item)}
-                          className="px-2 py-1 text-xs bg-rose-50 text-rose-600 hover:bg-rose-100 rounded"
-                          title="Удалить"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+      {/* Main Tab 1: Knowledge Base Tree & Table */}
+      {mainTab === 'knowledge_base' && (
+        <>
+          {loading ? (
+            <div className="bg-white rounded-xl border border-gray-200 p-12 text-center shadow-sm">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-4 text-gray-500 font-medium">Загрузка вопросов...</p>
+            </div>
+          ) : error ? (
+            <div className="bg-rose-50 border border-rose-200 rounded-xl p-6 text-rose-700 text-center">
+              <p className="font-semibold">{error}</p>
+              <Button onClick={loadData} variant="primary" className="mt-3">
+                Повторить
+              </Button>
+            </div>
+          ) : filteredTree.length === 0 ? (
+            <div className="bg-white rounded-xl border border-gray-200 p-12 text-center shadow-sm">
+              <span className="text-4xl block mb-2">💬</span>
+              <h3 className="text-lg font-semibold text-gray-800">Вопросов пока нет</h3>
+              <p className="text-gray-500 text-sm mt-1 max-w-md mx-auto">
+                {search
+                  ? 'По вашему запросу ничего не найдено.'
+                  : 'Создайте первый вопрос, чтобы посетители сайта могли получать полезные ответы.'}
+              </p>
+              <Button onClick={() => openCreateModal(null)} variant="primary" className="mt-4">
+                + Создать вопрос
+              </Button>
+            </div>
+          ) : viewMode === 'tree' ? (
+            <div className="space-y-3">
+              {filteredTree.map(rootNode => renderTreeNode(rootNode, 0))}
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 text-left text-sm">
+                  <thead className="bg-gray-50 text-gray-600 font-semibold text-xs uppercase tracking-wider">
+                    <tr>
+                      <th className="px-4 py-3.5">ID</th>
+                      <th className="px-4 py-3.5">Вопрос</th>
+                      <th className="px-4 py-3.5">Родительская ветка</th>
+                      <th className="px-4 py-3.5">Ответ помощника</th>
+                      <th className="px-4 py-3.5 text-center">Порядок</th>
+                      <th className="px-4 py-3.5 text-center">Статус</th>
+                      <th className="px-4 py-3.5 text-right">Действия</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 bg-white">
+                    {filteredFlatList.map(item => (
+                      <tr key={item.id} className="hover:bg-gray-50/70 transition">
+                        <td className="px-4 py-3 text-gray-400 font-mono text-xs">#{item.id}</td>
+                        <td className="px-4 py-3 font-semibold text-gray-900 max-w-xs">
+                          {item.question}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600 text-xs">
+                          {item.parent ? (
+                            <span className="inline-flex items-center gap-1 bg-gray-100 px-2 py-0.5 rounded text-gray-700">
+                              ↳ {item.parent.question}
+                            </span>
+                          ) : (
+                            <span className="text-blue-600 font-medium">Корневой вопрос</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600 text-xs max-w-md truncate">
+                          {item.answer}
+                        </td>
+                        <td className="px-4 py-3 text-center text-gray-700 text-xs font-mono">
+                          {item.sort_order}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleStatus(item)}
+                            className={`px-2 py-0.5 text-xs font-medium rounded-full cursor-pointer ${
+                              item.is_active
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-rose-100 text-rose-800'
+                            }`}
+                          >
+                            {item.is_active ? 'Активен' : 'Скрыт'}
+                          </button>
+                        </td>
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => openCreateModal(item.id)}
+                              className="px-2 py-1 text-xs bg-blue-50 text-blue-700 hover:bg-blue-100 rounded cursor-pointer"
+                              title="Добавить подвопрос"
+                            >
+                              + ветка
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openEditModal(item)}
+                              className="px-2 py-1 text-xs bg-gray-100 text-gray-700 hover:bg-gray-200 rounded cursor-pointer"
+                              title="Редактировать"
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(item)}
+                              className="px-2 py-1 text-xs bg-rose-50 text-rose-600 hover:bg-rose-100 rounded cursor-pointer"
+                              title="Удалить"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
-      {/* Modal Dialog for Create / Edit */}
+      {/* Main Tab 2: User Questions from Chat */}
+      {mainTab === 'user_questions' && (
+        <>
+          {loadingUserQuestions ? (
+            <div className="bg-white rounded-xl border border-gray-200 p-12 text-center shadow-sm">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-4 text-gray-500 font-medium">Загрузка вопросов пользователей...</p>
+            </div>
+          ) : filteredUserQuestions.length === 0 ? (
+            <div className="bg-white rounded-xl border border-gray-200 p-12 text-center shadow-sm">
+              <span className="text-4xl block mb-2">📥</span>
+              <h3 className="text-lg font-semibold text-gray-800">
+                {userQuestionFilter === 'unanswered'
+                  ? 'Нет неотвеченных вопросов'
+                  : 'Пользовательских вопросов пока нет'}
+              </h3>
+              <p className="text-gray-500 text-sm mt-1 max-w-md mx-auto">
+                Вопросы, заданные посетителями через форму в чат-боте, отобразятся здесь.
+              </p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 text-left text-sm">
+                  <thead className="bg-gray-50 text-gray-600 font-semibold text-xs uppercase tracking-wider">
+                    <tr>
+                      <th className="px-4 py-3.5">Дата</th>
+                      <th className="px-4 py-3.5">Контакты</th>
+                      <th className="px-4 py-3.5">Вопрос посетителя</th>
+                      <th className="px-4 py-3.5 text-center">Статус в FAQ</th>
+                      <th className="px-4 py-3.5 text-right">Действие</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 bg-white">
+                    {filteredUserQuestions.map(uq => (
+                      <tr key={uq.id} className="hover:bg-gray-50/70 transition">
+                        <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
+                          <div>{new Date(uq.created_at).toLocaleDateString('ru-RU')}</div>
+                          <div className="text-gray-400 font-mono text-[11px]">
+                            {new Date(uq.created_at).toLocaleTimeString('ru-RU', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="font-semibold text-gray-900">
+                            <a href={`tel:${uq.phone}`} className="hover:text-blue-600 flex items-center gap-1">
+                              <span>📞</span>
+                              <span>{uq.phone}</span>
+                            </a>
+                          </div>
+                          {uq.email && (
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              <a href={`mailto:${uq.email}`} className="hover:underline flex items-center gap-1">
+                                <span>✉️</span>
+                                <span>{uq.email}</span>
+                              </a>
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3 max-w-md">
+                          <div className="text-sm font-medium text-gray-900 bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 leading-relaxed">
+                            {uq.question}
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-3 text-center whitespace-nowrap">
+                          {uq.is_faq_added ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                              <span>✓</span>
+                              <span>Опубликован в FAQ</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                              <span>⏳</span>
+                              <span>Ожидает ответа</span>
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => openAnswerUserQuestionModal(uq)}
+                            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition shadow-xs cursor-pointer inline-flex items-center gap-1.5"
+                          >
+                            <span>✍️</span>
+                            <span>{uq.is_faq_added ? 'Обновить в FAQ' : 'Ответить и в FAQ'}</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Modal Dialog for Create / Edit FAQ */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-200 animate-in fade-in duration-150">
             <div className="flex items-center justify-between p-5 border-b border-gray-200 sticky top-0 bg-white z-10">
               <h3 className="text-lg font-bold text-gray-900">
-                {editingFaq ? 'Редактировать вопрос' : 'Новый вопрос FAQ'}
+                {sourceLeadId
+                  ? 'Ответить на вопрос пользователя и опубликовать в FAQ'
+                  : editingFaq
+                  ? 'Редактировать вопрос'
+                  : 'Новый вопрос FAQ'}
               </h3>
               <button
                 type="button"
@@ -595,7 +852,7 @@ export const FaqList: React.FC = () => {
               {/* Parent Selector */}
               <div>
                 <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1.5">
-                  Родительская ветка (Вопрос вышестоящего уровня)
+                  Родительская ветка (Куда поместить вопрос)
                 </label>
                 <select
                   value={modalForm.parent_id === null ? '' : modalForm.parent_id}
@@ -617,7 +874,7 @@ export const FaqList: React.FC = () => {
                     ))}
                 </select>
                 <span className="text-xs text-gray-400 mt-1 block">
-                  Если выбрать «Корневой вопрос», он будет отображаться на стартовом экране виджета.
+                  Если выбрать «Корневой вопрос», он будет доступен на стартовом экране виджета.
                 </span>
               </div>
 
@@ -632,7 +889,7 @@ export const FaqList: React.FC = () => {
                   value={modalForm.question}
                   onChange={e => setModalForm(prev => ({ ...prev, question: e.target.value }))}
                   placeholder="Например: Как мне записаться на курс?"
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
                 />
               </div>
 
@@ -665,9 +922,6 @@ export const FaqList: React.FC = () => {
                     }
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
-                  <span className="text-xs text-gray-400 mt-1 block">
-                    Меньшее число показывается выше.
-                  </span>
                 </div>
 
                 <div className="flex items-center pt-6">
@@ -698,7 +952,13 @@ export const FaqList: React.FC = () => {
                   Отмена
                 </Button>
                 <Button type="submit" variant="primary" disabled={submitting}>
-                  {submitting ? 'Сохранение...' : editingFaq ? 'Сохранить изменения' : 'Создать вопрос'}
+                  {submitting
+                    ? 'Сохранение...'
+                    : sourceLeadId
+                    ? 'Опубликовать в FAQ и закрыть вопрос'
+                    : editingFaq
+                    ? 'Сохранить изменения'
+                    : 'Создать вопрос'}
                 </Button>
               </div>
             </form>

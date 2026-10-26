@@ -67,6 +67,7 @@ const ApplicationsContent: FC = () => {
           <option value="">Все типы</option>
           <option value="course">Курсы</option>
           <option value="document">Документы</option>
+          <option value="lead">Вопросы / Лиды из чата</option>
         </select>
         <select
           value={statusFilter}
@@ -124,10 +125,16 @@ const ApplicationsContent: FC = () => {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center">
-                          <span className="text-xl mr-2">{app.type === 'course' ? '🎓' : '📄'}</span>
+                          <span className="text-xl mr-2">
+                            {app.type === 'course' ? '🎓' : app.type === 'lead' ? '🎯' : '📄'}
+                          </span>
                           <div>
                             <p className="text-sm font-medium text-gray-900 line-clamp-2">{app.item_title}</p>
-                            <p className="text-xs text-gray-500">{app.price} ₸</p>
+                            {app.type === 'lead' ? (
+                              <span className="text-xs font-semibold text-blue-600">Обращение из чата</span>
+                            ) : (
+                              <p className="text-xs text-gray-500">{app.price} ₸</p>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -136,7 +143,7 @@ const ApplicationsContent: FC = () => {
                         <div className="text-sm text-gray-500">{app.phone}</div>
                         <div className="text-sm text-gray-500">{app.email}</div>
                         {app.company && <div className="text-xs text-gray-400 mt-1">Компания: {app.company}</div>}
-                        {app.notes && <div className="text-xs text-gray-400 mt-1 italic">"{app.notes}"</div>}
+                        {app.notes && <div className="text-xs text-gray-600 mt-1 italic bg-gray-50 p-1.5 rounded">"{app.notes}"</div>}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {app.user ? (
@@ -145,23 +152,38 @@ const ApplicationsContent: FC = () => {
                             <div className="text-xs text-gray-500 mt-1">{app.user.username}</div>
                           </div>
                         ) : (
-                          <span className="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded-full">Гость</span>
+                          <span className="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded-full">
+                            {app.type === 'lead' ? 'Чат' : 'Гость'}
+                          </span>
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <select
-                          value={app.payment_status}
-                          onChange={(e) => handleStatusChange(app, e.target.value)}
-                          className={`text-sm font-medium rounded-full px-3 py-1 border-0 ring-1 ring-inset focus:ring-2 focus:ring-blue-600 ${
-                            app.payment_status === 'paid' ? 'bg-green-50 text-green-700 ring-green-600/20' : 
-                            app.payment_status === 'contract' ? 'bg-blue-50 text-blue-700 ring-blue-600/20' : 
-                            'bg-yellow-50 text-yellow-800 ring-yellow-600/20'
-                          }`}
-                        >
-                          <option value="created">Создана</option>
-                          <option value="contract">Договор</option>
-                          <option value="paid">Оплачено</option>
-                        </select>
+                        {app.type === 'lead' ? (
+                          <select
+                            value={app.payment_status}
+                            onChange={(e) => handleStatusChange(app, e.target.value)}
+                            className="text-sm font-medium rounded-full px-3 py-1 border-0 ring-1 ring-inset bg-amber-50 text-amber-900 ring-amber-600/20 focus:ring-2 focus:ring-blue-600 cursor-pointer"
+                          >
+                            <option value="new">🟡 Новый</option>
+                            <option value="in_progress">🔵 В обработке</option>
+                            <option value="contacted">🟣 Связались</option>
+                            <option value="closed">🟢 Закрыт</option>
+                          </select>
+                        ) : (
+                          <select
+                            value={app.payment_status}
+                            onChange={(e) => handleStatusChange(app, e.target.value)}
+                            className={`text-sm font-medium rounded-full px-3 py-1 border-0 ring-1 ring-inset focus:ring-2 focus:ring-blue-600 cursor-pointer ${
+                              app.payment_status === 'paid' ? 'bg-green-50 text-green-700 ring-green-600/20' : 
+                              app.payment_status === 'contract' ? 'bg-blue-50 text-blue-700 ring-blue-600/20' : 
+                              'bg-yellow-50 text-yellow-800 ring-yellow-600/20'
+                            }`}
+                          >
+                            <option value="created">Создана</option>
+                            <option value="contract">Договор</option>
+                            <option value="paid">Оплачено</option>
+                          </select>
+                        )}
                       </td>
                     </tr>
                   );

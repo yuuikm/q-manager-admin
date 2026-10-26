@@ -8,7 +8,7 @@ export interface ApplicationUser {
 
 export interface Application {
   id: number;
-  type: 'course' | 'document';
+  type: 'course' | 'document' | 'lead' | string;
   item_title: string;
   item_id: number;
   first_name: string;
@@ -18,7 +18,7 @@ export interface Application {
   company: string | null;
   notes: string | null;
   price: number;
-  payment_status: 'created' | 'contract' | 'paid';
+  payment_status: 'created' | 'contract' | 'paid' | 'new' | 'in_progress' | 'contacted' | 'closed' | string;
   created_at: string;
   user: ApplicationUser | null;
 }

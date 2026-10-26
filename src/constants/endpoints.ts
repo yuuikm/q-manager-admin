@@ -80,5 +80,8 @@ export const ADMIN_ENDPOINTS = {
     FAQS: `${API_BASE_URL}/admin/faqs`,
     FAQS_TREE: `${API_BASE_URL}/admin/faqs/tree`,
     TOGGLE_FAQ_STATUS: `${API_BASE_URL}/admin/faqs`,
+
+    // Leads
+    LEADS: `${API_BASE_URL}/admin/leads`,
 };
 

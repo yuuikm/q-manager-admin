@@ -31,6 +31,7 @@ import SliderList from "pages/SliderList";
 import SliderUpload from "pages/SliderUpload";
 import MediaFiles from "pages/MediaFiles";
 import Applications from "pages/Applications";
+import Leads from "pages/Leads";
 import FaqList from "pages/FaqList";
 import RouteWrapper from "components/RouteWrapper";
 import "./App.css";
@@ -270,6 +271,14 @@ function AppContent() {
         element={
           <RouteWrapper>
             <Applications />
+          </RouteWrapper>
+        }
+      />
+      <Route
+        path={LINKS.leadsLink}
+        element={
+          <RouteWrapper>
+            <Leads />
           </RouteWrapper>
         }
       />
