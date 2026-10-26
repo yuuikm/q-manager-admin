@@ -2,7 +2,7 @@ name: Q-manager admin
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "master" ]
 
 jobs:
   build-and-deploy:
